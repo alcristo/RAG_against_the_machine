@@ -50,7 +50,7 @@ class Section:
 
 
 class Markdown:
-    def parse(self, filename: str) -> None:
+    def parse(self, filename: str) -> list[Section]:
         xtns = filename.split('.')[-1]
         if xtns != "md":
             raise ExtensionError(f"file as extension .{xtns}; must be '.md'")
@@ -59,21 +59,21 @@ class Markdown:
                 txt = f.read()
         except OSError as e:
             print(e, file=sys.stderr)
-            return
-        if len(txt) <= 2000:
-            return
+            return []
         lines = txt.splitlines()
 
         # sections is a list of (section_level, line number)
         sections: List[Tuple[int, int]] = []
+        in_block = False
         for i, line in enumerate(lines):
-            if line.strip().startswith("#"):
+            if line.startswith("```"):
+                in_block = not in_block
+            if not in_block and line.strip().startswith("#"):
                 level = len(line.strip().split()[0])
                 if level in range(1, 7):
                     sections.append((level, i))
         if not sections:
-            pars = txt.split('\n')
-            return
+            return [Section("", 0, txt)]
 
         # if text doesn't start with a section, chunk initial text
         text_sects: List[str] = []
@@ -102,8 +102,15 @@ class Markdown:
             sec_list.append(Section(title, level, content))
 
         # define children (immediate lower level)
-        parents: List[Section] = []
-
+        for i, sctn in enumerate(sec_list):
+            j = i + 1
+            while sec_list[j] and sec_list[j].level > sctn.level:
+                if sec_list[j].level == sctn.level + 1:
+                    sctn.children.append(sec_list[j])
+                j += 1
+        if first:
+            sec_list.insert(0, Section("", 0, first))
+        return sec_list
 
 
 class Chunker:
