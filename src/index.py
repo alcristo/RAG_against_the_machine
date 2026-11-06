@@ -124,29 +124,14 @@ class Markdown:
 
 
 class CodeBlock:
+
     def __init__(self, content: str) -> None:
         self.content = content
         self.logic_blocks = content.split("\n\n")
 
 
-class Function(CodeBlock):
-    def __init__(self, definition: str, content: str) -> None:
-        self.defin = definition
-        self.content = content
-        self.log_blocks = content.split("\n\n")
-
-
-class Class(CodeBlock):
-    def __init__(self, name: str, methods: List[Function] = []) -> None:
-        self.name = name
-        self.methods = methods
-
-
-"""class ImportBlock(CodeBlock):
-    def parse(self):"""
-
-
 class Python:
+
     def parse(self, filename: str) -> List[CodeBlock]:
 
         # read file
@@ -171,37 +156,6 @@ class Python:
 
 class Chunker:
     chunks: List[Chunk] = []
-
-    def _chunk_section(
-        self,
-        section: Section,
-        all_sects: List[Section]
-    ) -> List[Chunk]:
-        return []
-
-    @staticmethod
-    def _get_section(sections: List[Section], title: str) -> Section:
-        for s in sections:
-            if s.title == title:
-                return s
-        raise AttributeError(f"'{title}' not in sections")
-
-    def _join_section_contents(
-        self,
-        sections: List[Section],
-        title: str
-    ) -> str:
-        section = self._get_section(sections, title)
-        txt: List[str] = []
-        for child in section.children:
-            child_text = self._join_section_contents(sections, child.title)
-            txt.append(child_text)
-        title_text = ""
-        for _ in range(section.level):
-            title_text += '#'
-        title_text += f" {section.title}"
-        txt.insert(0, title_text)
-        return "\n\n".join(txt)
 
     def markdown(self, filename: str) -> None:
         # read file
@@ -272,7 +226,6 @@ class Chunker:
                         continue
 
     def python(self, filename: str) -> None:
-
         # read file
         try:
             with open(filename) as f:
@@ -326,7 +279,7 @@ class Chunker:
 
 
 def get_all_files(dir: str) -> List[str]:
-    """Return list of all files in this directory and subdirecctories"""
+    """Return list of all files in this directory and subdirectories"""
     all_files: List[str] = []
     for root, _, files in os.walk(dir):
         for file in files:
@@ -358,29 +311,15 @@ def get_important_files(files: List[str]) -> List[str]:
 
 
 if __name__ == "__main__":
-    md = Markdown()
-    sections = md.parse("README.md")
-    for section in sections:
-        for i in range(section.level):
-            print('#', end="")
-        print(' ', end="")
-        print(section.title)
-        print(section.content)
-    print()
-    print()
-    print()
-    py = Python()
-    blocks = py.parse("src/index.py")
-    for block in blocks:
-        for logic_block in block.logic_blocks:
-            print(logic_block)
-            print()
-        print()
-    """rag_files = get_all_files("data/raw/vllm-0.10.1/")
-    d = get_extensions(rag_files)
-    for key, value in d.items():
-        print(f"{key}: {value}")
-    imp_files = get_important_files(rag_files)
-    for file in imp_files:
-        print(file)
-    print(len(imp_files))"""
+    chunker = Chunker()
+    chunker.markdown("/home/alcristo/cursus/mst3/Fly-in/README.md")
+    i = 0
+    for chunk in chunker.chunks:
+        print(f"\nMarkdown Chunk {i}\n")
+        print(chunk.content)
+        i += 1
+    chunker.python("src/index.py")
+    for chunk in chunker.chunks[i:]:
+        print(f"\nPython Chunk {i}\n")
+        print(chunk.content)
+        i += 1
