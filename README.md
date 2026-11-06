@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum bby alcristo*
+*This project has been created as part of the 42 curriculum by alcristo*
 
 # RAG against the machine
 
