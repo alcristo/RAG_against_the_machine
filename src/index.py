@@ -52,8 +52,8 @@ class Section:
 
 
 class Markdown:
-    def parse(self, filename: str) -> list[Section]:
 
+    def parse(self, filename: str) -> list[Section]:
         # read file
         xtns = filename.split('.')[-1]
         if xtns != "md":
@@ -172,7 +172,39 @@ class Python:
 class Chunker:
     chunks: List[Chunk] = []
 
+    def _chunk_section(
+        self,
+        section: Section,
+        all_sects: List[Section]
+    ) -> List[Chunk]:
+        return []
+
+    @staticmethod
+    def _get_section(sections: List[Section], title: str) -> Section:
+        for s in sections:
+            if s.title == title:
+                return s
+        raise AttributeError(f"'{title}' not in sections")
+
+    def _join_section_contents(
+        self,
+        sections: List[Section],
+        title: str
+    ) -> str:
+        section = self._get_section(sections, title)
+        txt: List[str] = []
+        for child in section.children:
+            child_text = self._join_section_contents(sections, child.title)
+            txt.append(child_text)
+        title_text = ""
+        for _ in range(section.level):
+            title_text += '#'
+        title_text += f" {section.title}"
+        txt.insert(0, title_text)
+        return "\n\n".join(txt)
+
     def markdown(self, filename: str) -> None:
+        # read file
         try:
             with open(filename) as f:
                 txt = f.read()
@@ -183,10 +215,14 @@ class Chunker:
             chunk_id = 0
         else:
             chunk_id = self.chunks[-1].id + 1
+
+        # chunk all if length is lower than limit
         if len(txt) <= 2000:
             new_chunk = Chunk(chunk_id, filename, txt)
             self.chunks.append(new_chunk)
             return
+
+        # chunk by sections
         md = Markdown()
         sections = md.parse(filename)
         lengths = [len(s.get_full_content().strip()) for s in sections]
@@ -200,7 +236,44 @@ class Chunker:
                 self.chunks.append(chunk)
                 continue
 
+            # chunk by paragraphs
+            paragraphs = sections[i].content.strip().split("\n\n")
+            for par in paragraphs:
+                if len(par) <= 2000:
+                    chunk = Chunk(
+                        len(self.chunks),
+                        filename,
+                        par.strip()
+                    )
+                    self.chunks.append(chunk)
+                    continue
+
+                # chunk by sentences
+                sentences = [s.strip() for s in par.split('.')]
+                for s in sentences:
+                    if len(s) <= 2000:
+                        chunk = Chunk(
+                            len(self.chunks),
+                            filename,
+                            s.strip()
+                        )
+                        self.chunks.append(chunk)
+                        continue
+
+                    # chunk by words
+                    words = [w for w in s.split(' ')]
+                    for w in words:
+                        chunk = Chunk(
+                            len(self.chunks),
+                            filename,
+                            w.strip()
+                        )
+                        self.chunks.append(chunk)
+                        continue
+
     def python(self, filename: str) -> None:
+
+        # read file
         try:
             with open(filename) as f:
                 txt = f.read()
@@ -214,6 +287,8 @@ class Chunker:
         if len(txt) <= 2000:
             self.chunks.append(Chunk(chunk_id, filename, txt))
             return
+
+        # chunk by blocks (imports, classes, functions, ...)
         py = Python()
         blocks = py.parse(filename)
         lengths = [len(b.content.strip()) for b in blocks]
@@ -226,6 +301,28 @@ class Chunker:
                 )
                 self.chunks.append(chunk)
                 continue
+
+            # chunk by logic blocks
+            for block in blocks[i].logic_blocks:
+                if len(block) <= 2000:
+                    chunk = Chunk(
+                        len(self.chunks),
+                        filename,
+                        block
+                    )
+                    self.chunks.append(chunk)
+                    continue
+
+                # chunk by statements
+                for line in block.splitlines():
+                    if not line.strip():
+                        continue
+                    chunk = Chunk(
+                        len(self.chunks),
+                        filename,
+                        line
+                    )
+                    self.chunks.append(chunk)
 
 
 def get_all_files(dir: str) -> List[str]:
