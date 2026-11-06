@@ -97,17 +97,23 @@ class Markdown:
             first = text_sects[0]
         for sec in text_sects[s:]:
             title = sec.strip().splitlines()[0].lstrip('#').strip()
-            content = sec.split("\n", 1)[1]
+            try:
+                content = sec.split("\n", 1)[1]
+            except IndexError:
+                content = '\n'
             level = sec.strip().splitlines()[0].count('#')
             sec_list.append(Section(title, level, content))
 
         # define children (immediate lower level)
         for i, sctn in enumerate(sec_list):
             j = i + 1
-            while sec_list[j] and sec_list[j].level > sctn.level:
-                if sec_list[j].level == sctn.level + 1:
-                    sctn.children.append(sec_list[j])
-                j += 1
+            try:
+                while sec_list[j] and sec_list[j].level > sctn.level:
+                    if sec_list[j].level == sctn.level + 1:
+                        sctn.children.append(sec_list[j])
+                    j += 1
+            except IndexError:
+                break
         if first:
             sec_list.insert(0, Section("", 0, first))
         return sec_list
@@ -181,11 +187,19 @@ def get_important_files(files: List[str]) -> List[str]:
 
 
 if __name__ == "__main__":
-    rag_files = get_all_files("data/raw/vllm-0.10.1/")
+    md = Markdown()
+    foo = md.parse("README.md")
+    for section in foo:
+        for i in range(section.level):
+            print('#', end="")
+        print(' ', end="")
+        print(section.title)
+        print(section.content)
+    """rag_files = get_all_files("data/raw/vllm-0.10.1/")
     d = get_extensions(rag_files)
     for key, value in d.items():
         print(f"{key}: {value}")
     imp_files = get_important_files(rag_files)
     for file in imp_files:
         print(file)
-    print(len(imp_files))
+    print(len(imp_files))"""
