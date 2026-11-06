@@ -33,12 +33,14 @@ class Chunk:
 
 
 class FileParser(Protocol):
+
     def parse(self, filename: str) -> None:
         pass
 
 
 @dataclass
 class Section:
+
     def __init__(self, title: str, level: int, content: str):
         self.title = title
         self.level = level
@@ -46,11 +48,13 @@ class Section:
         self.children: List["Section"] = []
 
     def get_full_content(self):
-        return self.title + '\n' + self.content.strip()
+        return self.title.strip() + "\n\n" + self.content.strip()
 
 
 class Markdown:
     def parse(self, filename: str) -> list[Section]:
+
+        # read file
         xtns = filename.split('.')[-1]
         if xtns != "md":
             raise ExtensionError(f"file as extension .{xtns}; must be '.md'")
@@ -119,6 +123,52 @@ class Markdown:
         return sec_list
 
 
+class CodeBlock:
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.logic_blocks = content.split("\n\n")
+
+
+class Function(CodeBlock):
+    def __init__(self, definition: str, content: str) -> None:
+        self.defin = definition
+        self.content = content
+        self.log_blocks = content.split("\n\n")
+
+
+class Class(CodeBlock):
+    def __init__(self, name: str, methods: List[Function] = []) -> None:
+        self.name = name
+        self.methods = methods
+
+
+"""class ImportBlock(CodeBlock):
+    def parse(self):"""
+
+
+class Python:
+    def parse(self, filename: str) -> List[CodeBlock]:
+
+        # read file
+        xtns = filename.split('.')[-1]
+        if xtns != "py":
+            raise ExtensionError(f"file as extension .{xtns}; must be '.py'")
+        try:
+            with open(filename) as f:
+                txt = f.read()
+        except OSError as e:
+            print(e, file=sys.stderr)
+            return []
+
+        # divide by logic blocks
+        logic_blocks = txt.split("\n\n\n")
+        code_blocks: List[CodeBlock] = []
+        for block in logic_blocks:
+            code_block = CodeBlock(block)
+            code_blocks.append(code_block)
+        return code_blocks
+
+
 class Chunker:
     chunks: List[Chunk] = []
 
@@ -137,6 +187,18 @@ class Chunker:
             new_chunk = Chunk(chunk_id, filename, txt)
             self.chunks.append(new_chunk)
             return
+        md = Markdown()
+        sections = md.parse(filename)
+        lengths = [len(s.get_full_content().strip()) for s in sections]
+        for i, l in enumerate(lengths):
+            if l <= 2000:
+                chunk = Chunk(
+                    len(self.chunks),
+                    filename,
+                    sections[i].get_full_content().strip()
+                )
+                self.chunks.append(chunk)
+                continue
 
     def python(self, filename: str) -> None:
         try:
@@ -152,6 +214,18 @@ class Chunker:
         if len(txt) <= 2000:
             self.chunks.append(Chunk(chunk_id, filename, txt))
             return
+        py = Python()
+        blocks = py.parse(filename)
+        lengths = [len(b.content.strip()) for b in blocks]
+        for i, l in enumerate(lengths):
+            if l <= 2000:
+                chunk = Chunk(
+                    len(self.chunks),
+                    filename,
+                    blocks[i].content
+                )
+                self.chunks.append(chunk)
+                continue
 
 
 def get_all_files(dir: str) -> List[str]:
@@ -188,13 +262,23 @@ def get_important_files(files: List[str]) -> List[str]:
 
 if __name__ == "__main__":
     md = Markdown()
-    foo = md.parse("README.md")
-    for section in foo:
+    sections = md.parse("README.md")
+    for section in sections:
         for i in range(section.level):
             print('#', end="")
         print(' ', end="")
         print(section.title)
         print(section.content)
+    print()
+    print()
+    print()
+    py = Python()
+    blocks = py.parse("src/index.py")
+    for block in blocks:
+        for logic_block in block.logic_blocks:
+            print(logic_block)
+            print()
+        print()
     """rag_files = get_all_files("data/raw/vllm-0.10.1/")
     d = get_extensions(rag_files)
     for key, value in d.items():
