@@ -52,7 +52,7 @@ class Section:
 
 class Markdown:
 
-    def parse(self, filename: str) -> list[Section]:
+    def parse(self, filename: str) -> List[Section]:
         # read file
         xtns = filename.split('.')[-1]
         if xtns != "md":
@@ -200,6 +200,10 @@ class Chunker:
                     )
                     self.chunks.append(chunk)
                     continue
+
+                # chunk tables
+                if par.find('\n') >= 0:
+                    pass
 
                 # chunk by sentences
                 sentences = [s.strip() for s in par.split('.')]
