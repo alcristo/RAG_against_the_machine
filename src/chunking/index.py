@@ -71,7 +71,12 @@ class Markdown:
         for i, line in enumerate(lines):
             if line.startswith("```"):
                 in_block = not in_block
-            if not in_block and line.strip().startswith("#"):
+            if all((
+                not in_block,
+                line.strip().startswith("#"),
+                len(line.strip().strip('#')),
+                line.strip().strip('#')[0].isspace()
+            )):
                 level = len(line.strip().split()[0])
                 if level in range(1, 7):
                     sections.append((level, i))
@@ -210,6 +215,7 @@ class Chunker:
                                 filename,
                                 row.strip()
                             )
+                            self.chunks.append(chunk)
                             continue
                         cells = row.strip().split('|')
                         for cell in cells:
@@ -219,6 +225,7 @@ class Chunker:
                                     filename,
                                     cell.strip()
                                 )
+                                self.chunks.append(chunk)
                                 continue
                             words = cell.strip().split()
                             for word in words:
@@ -227,6 +234,7 @@ class Chunker:
                                     filename,
                                     word
                                 )
+                                self.chunks.append(chunk)
                         continue
 
                 # chunk by sentences
