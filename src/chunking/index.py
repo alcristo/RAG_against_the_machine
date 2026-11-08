@@ -202,8 +202,32 @@ class Chunker:
                     continue
 
                 # chunk tables
-                if par.find('\n') >= 0:
-                    pass
+                if par.find('\n') >= 0 and not par.strip().find('|'):
+                    for row in par.split('\n'):
+                        if len(row) <= 2000:
+                            chunk = Chunk(
+                                len(self.chunks),
+                                filename,
+                                row.strip()
+                            )
+                            continue
+                        cells = row.strip().split('|')
+                        for cell in cells:
+                            if len(cell) <= 2000:
+                                chunk = Chunk(
+                                    len(self.chunks),
+                                    filename,
+                                    cell.strip()
+                                )
+                                continue
+                            words = cell.strip().split()
+                            for word in words:
+                                chunk = Chunk(
+                                    len(self.chunks),
+                                    filename,
+                                    word
+                                )
+                        continue
 
                 # chunk by sentences
                 sentences = [s.strip() for s in par.split('.')]
