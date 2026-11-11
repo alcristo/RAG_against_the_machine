@@ -8,6 +8,8 @@ from chunking import (
     build_index
 )
 import time
+import json
+import os
 
 
 def chunk_statistics(chunks: Chunk):
@@ -84,9 +86,17 @@ def main():
     print(f"Chunking finished in {round(dt, 3)}s")
     print(f"Divided {len(files)} files in {len(chunks)} chunks")
     t0 = time.time()
-    build_index(chunks)
+    index, doc_l = build_index(chunks)
     dt = time.time() - t0
     print(f"Indexed {len(chunks)} chunks in {round(dt, 3)}s")
+    try:
+        os.makedirs("data/storage", exist_ok=True)
+        with open("data/storage/index.json", "w") as f:
+            json.dump(index, f, indent=2)
+        with open("data/storage/document_length.json", "w") as f:
+            json.dump(doc_l, f, indent=2)
+    except (OSError, json.JSONDecodeError) as e:
+        print(e)
 
 
 if __name__ == "__main__":
