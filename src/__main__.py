@@ -1,5 +1,12 @@
 from tqdm import tqdm
-from chunking import get_all_files, get_important_files, Chunk, recursive_text_split, recursive_py_split
+from chunking import (
+    get_all_files,
+    get_important_files,
+    Chunk,
+    recursive_text_split,
+    recursive_py_split,
+    build_index
+)
 import time
 
 
@@ -27,7 +34,6 @@ def chunk_statistics(chunks: Chunk):
 def main():
     files = get_important_files(get_all_files("data/raw/vllm-0.10.1"))
     t0 = time.time()
-    # chunker = Chunker()
     bar = tqdm(
         range(len(files)),
         desc="Chunking files",
@@ -77,7 +83,10 @@ def main():
     dt = time.time() - t0
     print(f"Chunking finished in {round(dt, 3)}s")
     print(f"Divided {len(files)} files in {len(chunks)} chunks")
-    # chunk_statistics(chunks)
+    t0 = time.time()
+    build_index(chunks)
+    dt = time.time() - t0
+    print(f"Indexed {len(chunks)} chunks in {round(dt, 3)}s")
 
 
 if __name__ == "__main__":
