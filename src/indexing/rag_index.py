@@ -1,7 +1,7 @@
 from tqdm import tqdm
 import re
 from typing import Any, List, Dict, Tuple
-from .overlap import Chunk
+from ..chunking.chunk import Chunk
 
 
 def tokenize(text: str) -> List[Any]:
