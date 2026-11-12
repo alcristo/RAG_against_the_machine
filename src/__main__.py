@@ -53,7 +53,14 @@ def index(max_chunk_size: int = 2000):
                 changes.append(fn)
         if all((not changes, not additions, not deletions)):
             return
-        
+
+        """
+        Files that have chunks to remove:
+        - document_length.json: as keys
+        - metadata.json: in "files" dict: the whole key
+        - index.json: in every key dict, its key
+        - chunks.json: regenerates after re-indexing.
+        """
         # for fn in deletions:
 
     # chunk files
@@ -95,9 +102,13 @@ def index(max_chunk_size: int = 2000):
             with open("data/processed/metadata.json", "w") as f:
                 json.dump(full_metadata, f, indent=2)
     except (OSError, json.JSONDecodeError) as e:
+        os.chmod("data/processed/chunks.json", 700)
         os.remove("data/processed/chunks.json")
+        os.chmod("data/processed/index.json", 700)
         os.remove("data/processed/index.json")
+        os.chmod("data/processed/document_length.json", 700)
         os.remove("data/processed/document_length.json")
+        os.chmod("data/processed/metadata.json", 700)
         os.remove("data/processed/metadata.json")
         print(e, file=sys.stderr)
         return

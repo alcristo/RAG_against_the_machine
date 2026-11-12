@@ -242,25 +242,28 @@ def chunk_one_file(
     chunks: List[Chunk] = []
     with open(filename) as f:
         txt = f.read()
-    extension = filename.split('.')[-1]
-    if extension == "py":
-        contents = recursive_py_split(txt, max_size)
-        for c in contents:
-            if not c.strip():
-                continue
-            if len(c) > max_size:
-                raise AttributeError(
-                    f"Chunking error in {filename}:\n\n"
-                    f"{c}"
-                )
-            chunks.append(Chunk(
-                chunk_id=nxt_id,
-                doc_id=filename,
-                content=c,
-                start_index=sum([len(t) for t in contents[:i]]),
-                end_index=sum([len(t) for t in contents[:i]]) + len(c)
-            ))
-            nxt_id += 1
+    if filename.endswith(".py"):
+        contents = recursive_py_split(txt)
+    else:
+        contents = recursive_text_split(txt)
+    current_index = 0
+    for c in contents:
+        if not c.strip():
+            current_index += len(c)
+            continue
+        if len(c) > max_size:
+            raise AttributeError(
+                f"Chunking error in {filename}:\n\n{c}"
+            )
+        chunks.append(Chunk(
+            chunk_id=nxt_id,
+            doc_id=filename,
+            content=c,
+            start_index=current_index,
+            end_index=current_index + len(c)
+        ))
+        current_index += len(c)
+        nxt_id += 1
     return chunks
 
 
@@ -275,42 +278,28 @@ def chunk_files(files: List[str], max_size: int = 2000) -> List[Chunk]:
     for i in bar:
         with open(files[i]) as f:
             txt = f.read()
-        if files[i].split('.')[-1] == "py":
+        if files[i].endswith(".py"):
             contents = recursive_py_split(txt)
-            for c in contents:
-                if not c.strip():
-                    continue
-                if len(c) > max_size:
-                    raise AttributeError(
-                        f"Chunking error in {files[i]}:\n\n"
-                        f"{c}"
-                    )
-                chunks.append(Chunk(
-                    chunk_id=chunk_id,
-                    doc_id=files[i],
-                    content=c,
-                    start_index=sum([len(t) for t in contents[:i]]),
-                    end_index=sum([len(t) for t in contents[:i]]) + len(c)
-                ))
-                chunk_id += 1
         else:
             contents = recursive_text_split(txt)
-            for c in contents:
-                if not c.strip():
-                    continue
-                if len(c) > max_size:
-                    raise AttributeError(
-                        f"Chunking error in {files[i]}:\n\n"
-                        f"{c}"
-                    )
-                chunks.append(Chunk(
-                    chunk_id=chunk_id,
-                    doc_id=files[i],
-                    content=c,
-                    start_index=sum([len(t) for t in contents[:i]]),
-                    end_index=sum([len(t) for t in contents[:i]]) + len(c)
-                ))
-                chunk_id += 1
+        current_index = 0
+        for c in contents:
+            if not c.strip():
+                current_index += len(c)
+                continue
+            if len(c) > max_size:
+                raise AttributeError(
+                    f"Chunking error in {files[i]}:\n\n{c}"
+                )
+            chunks.append(Chunk(
+                chunk_id=chunk_id,
+                doc_id=files[i],
+                content=c,
+                start_index=current_index,
+                end_index=current_index + len(c)
+            ))
+            current_index += len(c)
+            chunk_id += 1
     return chunks
 
 
