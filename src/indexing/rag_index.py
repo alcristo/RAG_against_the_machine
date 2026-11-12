@@ -1,7 +1,6 @@
 from tqdm import tqdm
 import re
 from typing import Any, List, Dict, Tuple
-from ..chunking.chunk import Chunk
 
 
 def tokenize(text: str) -> List[Any]:
@@ -9,7 +8,7 @@ def tokenize(text: str) -> List[Any]:
 
 
 def build_index(
-    chunks: List[Chunk]
+    chunks: List[Any]
 ) -> Tuple[Dict[str, Dict[str, int]], Dict[int, int]]:
     inverted_index: Dict[str, Dict[str, int]] = {}
     document_lengths: Dict[int, int] = {}

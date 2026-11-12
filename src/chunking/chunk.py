@@ -1,5 +1,5 @@
 from tqdm import tqdm
-from typing import List
+from typing import List, Dict, Any
 
 
 class Chunk:
@@ -29,13 +29,23 @@ class Chunk:
         self.end_index = end_index
         self.context = context
 
+    def dump(self, chunk_dict: Dict[int, Dict[str, Any]]) -> None:
+        chunk_dict[self.id] = {
+            "file": self.document,
+            "start_index": self.start_index,
+            "end_index": self.end_index
+        }
+
 
 def recursive_split(
     text: str,
     max_size: int = 2000,
-    overlap: int = 200,
+    overlap: int = -1,
     separators: list[str] | None = None,
 ) -> list[str]:
+
+    if overlap < 0 or overlap > max_size // 5:
+        overlap = max_size // 10
 
     if separators is None:
         separators = ["\n\n", "\n", ". ", " "]
@@ -103,7 +113,7 @@ def recursive_split(
     return result
 
 
-def recursive_text_split(text: str, max_size: int = 2000, overlap: int = 200):
+def recursive_text_split(text: str, max_size: int = 2000, overlap: int = -1):
     return recursive_split(
         text,
         max_size,
@@ -112,7 +122,7 @@ def recursive_text_split(text: str, max_size: int = 2000, overlap: int = 200):
     )
 
 
-def recursive_py_split(text: str, max_size: int = 2000, overlap: int = 200):
+def recursive_py_split(text: str, max_size: int = 2000, overlap: int = -1):
     return recursive_split(
         text,
         max_size,
@@ -224,7 +234,37 @@ def add_overlap(
     return result
 
 
-def chunk_files(files: List[str]):
+def chunk_one_file(
+    filename: str,
+    nxt_id: int,
+    max_size: int = 2000
+) -> List[Chunk]:
+    chunks: List[Chunk] = []
+    with open(filename) as f:
+        txt = f.read()
+    extension = filename.split('.')[-1]
+    if extension == "py":
+        contents = recursive_py_split(txt, max_size)
+        for c in contents:
+            if not c.strip():
+                continue
+            if len(c) > max_size:
+                raise AttributeError(
+                    f"Chunking error in {filename}:\n\n"
+                    f"{c}"
+                )
+            chunks.append(Chunk(
+                chunk_id=nxt_id,
+                doc_id=filename,
+                content=c,
+                start_index=sum([len(t) for t in contents[:i]]),
+                end_index=sum([len(t) for t in contents[:i]]) + len(c)
+            ))
+            nxt_id += 1
+    return chunks
+
+
+def chunk_files(files: List[str], max_size: int = 2000) -> List[Chunk]:
     bar = tqdm(
         range(len(files)),
         desc="Chunking files",
@@ -240,7 +280,7 @@ def chunk_files(files: List[str]):
             for c in contents:
                 if not c.strip():
                     continue
-                if len(c) > 2000:
+                if len(c) > max_size:
                     raise AttributeError(
                         f"Chunking error in {files[i]}:\n\n"
                         f"{c}"
@@ -258,7 +298,7 @@ def chunk_files(files: List[str]):
             for c in contents:
                 if not c.strip():
                     continue
-                if len(c) > 2000:
+                if len(c) > max_size:
                     raise AttributeError(
                         f"Chunking error in {files[i]}:\n\n"
                         f"{c}"
