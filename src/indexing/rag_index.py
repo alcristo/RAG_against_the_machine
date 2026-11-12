@@ -27,7 +27,7 @@ def build_index(
         for token in tokens:
             if not inverted_index.get(token):
                 inverted_index[token] = {}
-            if c_id not in inverted_index[token]:
-                inverted_index[token][c_id] = 0
-            inverted_index[token][c_id] += 1
+            if str(c_id) not in inverted_index[token]:
+                inverted_index[token][str(c_id)] = 0
+            inverted_index[token][str(c_id)] += 1
     return dict(inverted_index), document_lengths

@@ -11,4 +11,5 @@ dependencies = [
     "numpy>=2.2.6",
     "pydantic>=2.14.2",
     "tqdm>=4.70.1",
+    "types-tqdm>=4.70.0.20261106",
 ]
