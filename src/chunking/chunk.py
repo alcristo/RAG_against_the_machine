@@ -42,7 +42,10 @@ def recursive_split(
     max_size: int = 2000,
     overlap: int = -1,
     separators: list[str] | None = None,
-) -> list[str]:
+) -> list[tuple[str, int, int]]:
+
+    if not text:
+        return []
 
     if overlap < 0 or overlap > max_size // 5:
         overlap = max_size // 10
@@ -50,83 +53,117 @@ def recursive_split(
     if separators is None:
         separators = ["\n\n", "\n", ". ", " "]
 
-    effective_max_size = max_size - overlap
+    if max_size <= 0 or overlap >= max_size:
+        raise ValueError("Invalid max_size or overlap")
 
-    def split(text: str) -> list[str]:
+    # Split into ordered, non-overlapping source intervals.
+    def split(start: int, end: int, sep_idx: int):
+        if end - start <= max_size:
+            return [(start, end)]
 
-        if len(text) <= effective_max_size:
-            return [text] if text.strip() else []
+        if sep_idx >= len(separators):
+            return [
+                (i, min(i + max_size, end))
+                for i in range(start, end, max_size)
+            ]
 
-        for sep in separators:
-            parts = text.split(sep)
+        sep = separators[sep_idx]
+        boundaries = []
+        pos = start
 
-            if len(parts) == 1:
+        while pos < end:
+            pos = text.find(sep, pos, end)
+
+            if pos == -1:
+                break
+
+            boundaries.append(pos + len(sep))
+            pos += len(sep)
+
+        if not boundaries:
+            return split(start, end, sep_idx + 1)
+
+        pieces = []
+        piece_start = start
+
+        for boundary in boundaries:
+            if boundary - piece_start <= max_size:
                 continue
 
-            chunks: list[str] = []
-            current = ""
+            # Use the last separator before the size limit.
+            candidates = [
+                b for b in boundaries
+                if piece_start < b <= piece_start + max_size
+            ]
 
-            for part in parts:
-                candidate = f"{current}{sep}{part}" if current else part
+            if not candidates:
+                return split(start, end, sep_idx + 1)
 
-                if len(candidate) <= effective_max_size:
-                    current = candidate
+            cut = candidates[-1]
 
-                else:
-                    if current:
-                        chunks.append(current)
+            pieces.extend(split(piece_start, cut, sep_idx + 1))
+            piece_start = cut
 
-                    if len(part) > effective_max_size:
-                        chunks.extend(split(part))
-                        current = ""
-                    else:
-                        current = part
+        if piece_start < end:
+            pieces.extend(split(piece_start, end, sep_idx + 1))
 
-            if current:
-                chunks.append(current)
+        return pieces
 
-            return chunks
+    # Generate semantic, non-overlapping pieces.
+    pieces = split(0, len(text), 0)
 
-        return [
-            text[i:i + effective_max_size]
-            for i in range(0, len(text), effective_max_size)
-        ]
+    # Merge adjacent pieces, respecting the maximum size.
+    merged = []
+    current_start = None
+    current_end = None
 
-    chunks = split(text[:])
+    for start, end in pieces:
+        if current_start is None:
+            current_start, current_end = start, end
 
-    if overlap <= 0:
-        return [chunk.strip() for chunk in chunks if chunk.strip()]
+        elif end - current_start <= max_size:
+            current_end = end
 
-    result: list[str] = []
+        else:
+            merged.append((current_start, current_end))
+            current_start, current_end = start, end
 
-    for i, chunk in enumerate(chunks):
+    if current_start is not None:
+        merged.append((current_start, current_end))
 
-        if i == 0:
-            result.append(chunk.strip())
-            continue
+    # Introduce overlap without exceeding max_size.
+    result = []
 
-        previous = chunks[i - 1]
-        prefix = previous[-overlap:]
+    for i, (start, end) in enumerate(merged):
+        if i > 0:
+            previous_end = merged[i - 1][1]
+            start = max(start, previous_end - overlap)
 
-        result.append((prefix + chunk).strip())
+        assert end - start <= max_size
+
+        result.append((text[start:end], start, end))
 
     return result
 
 
-def recursive_text_split(text: str, max_size: int = 2000, overlap: int = -1):
+def recursive_text_split(
+    text: str,
+    max_size: int = 2000,
+    overlap: int = -1
+):
     return recursive_split(
-        text,
-        max_size,
-        overlap,
+        text, max_size, overlap,
         ["\n\n", "\n", ". ", " "]
     )
 
 
-def recursive_py_split(text: str, max_size: int = 2000, overlap: int = -1):
+def recursive_py_split(
+    text: str,
+    max_size: int = 2000,
+    overlap: int = -1
+):
     return recursive_split(
-        text,
-        max_size,
-        overlap,
+        text, max_size, overlap,
         ["\n\n\n", "\n\n", "\n", ". ", " "]
     )
 
@@ -267,39 +304,44 @@ def chunk_one_file(
     return chunks
 
 
-def chunk_files(files: List[str], max_size: int = 2000) -> List[Chunk]:
-    bar = tqdm(
-        range(len(files)),
-        desc="Chunking files",
-        unit="files"
-    )
+def chunk_files(
+    files: List[str],
+    max_size: int = 2000,
+    overlap: int = -1
+) -> List[Chunk]:
+
     chunks: list[Chunk] = []
     chunk_id = 0
-    for i in bar:
-        with open(files[i]) as f:
+
+    for filepath in tqdm(files, desc="Chunking files", unit="files"):
+
+        with open(filepath) as f:
             txt = f.read()
-        if files[i].endswith(".py"):
-            contents = recursive_py_split(txt)
+
+        if not txt:
+            continue
+
+        if filepath.endswith(".py"):
+            contents = recursive_py_split(txt, max_size, overlap)
         else:
-            contents = recursive_text_split(txt)
-        current_index = 0
-        for c in contents:
-            if not c.strip():
-                current_index += len(c)
-                continue
-            if len(c) > max_size:
-                raise AttributeError(
-                    f"Chunking error in {files[i]}:\n\n{c}"
-                )
+            contents = recursive_text_split(txt, max_size, overlap)
+
+        for content, start, end in contents:
+
+            assert len(content) <= max_size
+            assert content == txt[start:end]
+            assert 0 <= start < end <= len(txt)
+
             chunks.append(Chunk(
                 chunk_id=chunk_id,
-                doc_id=files[i],
-                content=c,
-                start_index=current_index,
-                end_index=current_index + len(c)
+                doc_id=filepath,
+                content=content,
+                start_index=start,
+                end_index=end
             ))
-            current_index += len(c)
+
             chunk_id += 1
+
     return chunks
 
 
