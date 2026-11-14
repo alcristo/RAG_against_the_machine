@@ -17,7 +17,7 @@ class BM25:
         self.index = index
         self.lengths = document_lengths
         self.n = len(document_lengths)
-        self.avgdl = sum(document_lengths.values()) / len(document_lengths)
+        self.avgdl = sum(document_lengths.values()) / self.n
         nltk.download("wordnet")
         self.lemmatizer = WordNetLemmatizer()
 
@@ -30,7 +30,7 @@ class BM25:
         return [self.lemmatizer.lemmatize(token) for token in terms]
 
     def tf(self, term: str, chunk_id: int,) -> int:
-        return self.index[term][str(chunk_id)]
+        return self.index[term].get(str(chunk_id), 0)
 
     def df(self, term: str) -> int:
         return len(self.index[term])
@@ -54,7 +54,7 @@ class BM25:
             f = self.tf(term, chunk_id)
             dl = self.lengths[str(chunk_id)]
             score += self.idf(term) * (
-                f * (k1 + 1) / (f * k1 * (1 - b + b * dl / self.avgdl))
+                f * (k1 + 1) / (f + k1 * (1 - b + b * dl / self.avgdl))
             )
         return score
 

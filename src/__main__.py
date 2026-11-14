@@ -1,5 +1,6 @@
 from chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file
 from indexing import build_index, update_index
+from retrieval import BM25
 import fire
 from fire.core import FireExit
 from typing import Any, Dict, List
@@ -254,7 +255,26 @@ def index(max_chunk_size: int = 2000):
 
 
 def search(query: str, k: int = 5):
-    pass
+    try:
+        current_file = "data/processed/chunks.json"
+        with open(current_file) as f:
+            chunks = json.load(f)
+        current_file = "data/processed/document_length.json"
+        with open(current_file) as f:
+            dls = json.load(f)
+        current_file = "data/processed/index.json"
+        with open(current_file) as f:
+            index = json.load(f)
+    except OSError as e:
+        print(e, file=sys.stderr)
+        return
+    google = BM25(chunks, index, dls)
+    scores = google.sorted_scores(query, k)
+    for key, _ in scores.items():
+        print(f"{key}: {chunks[str(key)]['file']}")
+        print(f"Start index: {chunks[str(key)]['start_index']}")
+        print(f"End index: {chunks[str(key)]['end_index']}")
+        print()
 
 
 def search_dataset(
