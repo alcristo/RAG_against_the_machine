@@ -135,9 +135,18 @@ def recursive_split(
     result = []
 
     for i, (start, end) in enumerate(merged):
+
         if i > 0:
             previous_end = merged[i - 1][1]
-            start = max(start, previous_end - overlap)
+
+            # Desired overlap.
+            new_start = previous_end - overlap
+
+            # Never exceed max_size.
+            new_start = max(new_start, end - max_size)
+
+            # Never move beyond the original chunk start.
+            start = min(start, new_start)
 
         assert end - start <= max_size
 
@@ -283,23 +292,19 @@ def chunk_one_file(
         contents = recursive_py_split(txt)
     else:
         contents = recursive_text_split(txt)
-    current_index = 0
-    for c in contents:
-        if not c.strip():
-            current_index += len(c)
-            continue
-        if len(c) > max_size:
-            raise AttributeError(
-                f"Chunking error in {filename}:\n\n{c}"
-            )
+    for content, start, end in contents:
+
+        assert len(content) <= max_size
+        assert content == txt[start:end]
+        assert 0 <= start < end <= len(txt)
+
         chunks.append(Chunk(
             chunk_id=nxt_id,
             doc_id=filename,
-            content=c,
-            start_index=current_index,
-            end_index=current_index + len(c)
+            content=content,
+            start_index=start,
+            end_index=end
         ))
-        current_index += len(c)
         nxt_id += 1
     return chunks
 
