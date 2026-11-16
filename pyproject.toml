@@ -11,6 +11,25 @@ dependencies = [
     "nltk>=3.10.4",
     "numpy>=2.2.6",
     "pydantic>=2.14.2",
+    "sentence-transformers>=5.7",
+    "torch",
     "tqdm>=4.70.1",
     "types-tqdm>=4.70.0.20261106",
 ]
+
+[dependency-groups]
+lint = [
+    "flake8>=7.0",
+    "mypy>=2.0.0"
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
