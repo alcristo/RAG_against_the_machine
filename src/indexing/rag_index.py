@@ -1,19 +1,11 @@
 from tqdm import tqdm
-import nltk
-from nltk.stem import WordNetLemmatizer
 import re
 from typing import Any, List, Dict, Tuple, Iterable
 
 
-# lemmatizer: turn plural words to singular
-nltk.download("wordnet")
-lemmatizer = WordNetLemmatizer()
-
-
 def tokenize(text: str) -> List[Any]:
     text = text.lower().replace('_', ' ')
-    tokens = re.findall(r"\b\w+\b", text.lower())
-    return [lemmatizer.lemmatize(token) for token in tokens]
+    return re.findall(r"\b\w+\b", text.lower())
 
 
 def build_index(

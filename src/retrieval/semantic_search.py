@@ -1,22 +1,23 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 class SemanticSearch:
 
-    def __init__(self, chunks: List[Any] = []) -> None:
-        self.chunks = chunks
-        self.model: Any = SentenceTransformer(
-            "sentence-transformers/all-MiniLM-L6-v2",
-            device="cpu"
+    def __init__(self, chunks: Optional[List[Any]] = None) -> None:
+        if chunks:
+            self.chunks = chunks
+            self.contents = [c.content for c in chunks]
+        else:
+            self.chunks, self.contents = [], []
+        from static_embed_runner import StaticEmbedRunner
+        self.model = StaticEmbedRunner.load(
+            "sentence-transformers/static-retrieval-mrl-en-v1"
         )
-        self.embeddings: Any = self.model.encode(
-            chunks,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=True
-        )
+        self.embeddings: Any = None
+
+    def generate_embeddings(self):
+        self.embeddings = self.model.encode(self.contents)
 
     def save(self, path: str = "data/processed/embeddings.npy") -> None:
         np.save(path, self.embeddings)
@@ -25,11 +26,10 @@ class SemanticSearch:
         self.embeddings = np.load(path)
 
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        query_embedding = self.model.encode(
-            query,
-            normalize_embeddings=True,
-            convert_to_numpy=True
-        )
+        if self.embeddings is None:
+            raise ValueError("Embeddings have not been generated.")
+
+        query_embedding = self.model.encode(query)
 
         # calculate cosines with dot product
         scores = np.dot(self.embeddings, query_embedding)
@@ -38,7 +38,7 @@ class SemanticSearch:
 
         return [
             {
-                "document": self.chunks[i],
+                "document": self.chunks[i].document,
                 "score": float(scores[i])
             }
             for i in indices

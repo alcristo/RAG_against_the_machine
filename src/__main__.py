@@ -1,6 +1,6 @@
 from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file
 from .indexing import build_index, update_index
-from .retrieval import BM25
+from .retrieval import BM25, SemanticSearch
 import fire
 from fire.core import FireExit
 from typing import Any, Dict, List
@@ -140,10 +140,8 @@ def index(max_chunk_size: int = 2000):
             except OSError as e:
                 print(e, file=sys.stderr)
                 return
-            print(file_metadata)
             old_metadata["files"].update({fn: file_metadata[fn]})
             chunk_ids = [chunk.id for chunk in new_chunks]
-            print(chunk_ids)
             old_metadata["files"][fn]["chunks"] = chunk_ids
             chunk_dict: Dict[int, Dict[str, Any]] = {}
             for ch in new_chunks:
@@ -154,19 +152,15 @@ def index(max_chunk_size: int = 2000):
 
         # index new files
         for fn in additions:
-            print(f"Adding {fn}")
             chunk_ids = [int(k) for k in old_chunks.keys()]
             nxt_id = max(chunk_ids) + 1
-            print(f"chunking {fn}")
             new_chunks = chunk_one_file(fn, nxt_id, max_chunk_size)
             chunk_ids = [chunk.id for chunk in new_chunks]
-            print(f"assigning chunk ids to metadata")
             try:
                 file_metadata = get_file_metadata([fn])
             except OSError as e:
                 print(e, file=sys.stderr)
                 return
-            print(file_metadata)
             old_metadata["files"].update({fn: file_metadata[fn]})
             old_metadata["files"][fn]["chunks"] = chunk_ids
             chunk_dict = {}
@@ -174,7 +168,6 @@ def index(max_chunk_size: int = 2000):
                 ch.dump(chunk_dict)
             for c, v in chunk_dict.items():
                 old_chunks.update({str(c): v})
-            print(f"indexing {fn}")
             update_index(old_index, old_lengths, new_chunks)
 
         # save new data structures
@@ -225,6 +218,13 @@ def index(max_chunk_size: int = 2000):
     dt = time.time() - t0
     print(f"Indexed {len(chunks)} chunks in {round(dt, 3)}s")
 
+    # semantic index
+    print("Generating semantic embeddings...")
+    t0 = time.time()
+    sem = SemanticSearch(chunks)
+    dt = time.time() - t0
+    print(f"Embedded {len(chunks)} chunks in {round(dt, 3)}s")
+
     # save index and configuration files
     try:
         chunk_dict = {}
@@ -237,6 +237,7 @@ def index(max_chunk_size: int = 2000):
             json.dump(index, f, indent=2)
         with open("data/processed/document_length.json", "w") as f:
             json.dump(doc_l, f, indent=2)
+        sem.save()
         full_metadata = {"chunk_size": max_chunk_size, "files": file_metadata}
         if not old_metadata:
             with open("data/processed/metadata.json", "w") as f:
@@ -248,6 +249,8 @@ def index(max_chunk_size: int = 2000):
         os.remove("data/processed/index.json")
         os.chmod("data/processed/document_length.json", 700)
         os.remove("data/processed/document_length.json")
+        os.chmod("data/processed/embeddings.npy", 700)
+        os.remove("data/processed/embeddings.npy")
         os.chmod("data/processed/metadata.json", 700)
         os.remove("data/processed/metadata.json")
         print(e, file=sys.stderr)

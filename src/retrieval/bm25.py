@@ -1,8 +1,6 @@
 import re
 from math import log
 from typing import Any, List, Tuple, Dict
-import nltk
-from nltk.stem import WordNetLemmatizer
 
 
 class BM25:
@@ -18,16 +16,10 @@ class BM25:
         self.lengths = document_lengths
         self.n = len(document_lengths)
         self.avgdl = sum(document_lengths.values()) / self.n
-        nltk.download("wordnet")
-        self.lemmatizer = WordNetLemmatizer()
 
     def tokenize_string(self, text: str) -> List[Any]:
         text = text.lower().replace('_', ' ')
-        tokens = re.findall(r"\b\w+\b", text.lower())
-        return [self.lemmatizer.lemmatize(token) for token in tokens]
-
-    def tokenize_terms(self, terms: List[str]) -> List[Any]:
-        return [self.lemmatizer.lemmatize(token) for token in terms]
+        return re.findall(r"\b\w+\b", text.lower())
 
     def tf(self, term: str, chunk_id: int,) -> int:
         return self.index[term].get(str(chunk_id), 0)
