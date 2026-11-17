@@ -1,10 +1,11 @@
 from .fetch_files import get_py_md_files, get_file_metadata
-from .chunk import chunk_files, chunk_one_file
+from .chunk import chunk_files, chunk_one_file, Chunk
 
 
 __all__ = [
     "get_py_md_files",
     "get_file_metadata",
     "chunk_files",
-    "chunk_one_file"
+    "chunk_one_file",
+    "Chunk"
 ]

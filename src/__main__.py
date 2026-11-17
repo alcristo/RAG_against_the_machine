@@ -1,6 +1,7 @@
-from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file
+from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file, Chunk
 from .indexing import build_index, update_index
 from .retrieval import BM25, SemanticSearch
+import numpy as np
 import fire
 from fire.core import FireExit
 from typing import Any, Dict, List
@@ -109,6 +110,9 @@ def index(max_chunk_size: int = 2000):
                     except KeyError:
                         pass
 
+        # empty chunk list for semantic embeddings
+        extra_chunks: List[Chunk] = []
+
         # re-index changed files
         for fn in changes:
             chunk_ids = [int(k) for k in old_chunks.keys()]
@@ -149,6 +153,7 @@ def index(max_chunk_size: int = 2000):
             for c, v in chunk_dict.items():
                 old_chunks.update({str(c): v})
             update_index(old_index, old_lengths, new_chunks)
+            extra_chunks.extend(new_chunks)
 
         # index new files
         for fn in additions:
@@ -169,12 +174,18 @@ def index(max_chunk_size: int = 2000):
             for c, v in chunk_dict.items():
                 old_chunks.update({str(c): v})
             update_index(old_index, old_lengths, new_chunks)
+            extra_chunks.extend(new_chunks)
 
         # re-generate semantic embeddings
+        modifications = changes.copy()
+        modifications.extend(additions)
         print("Generating new semantic embeddings...")
         t0 = time.time()
-        sem = SemanticSearch(old_chunks)
-        sem.generate_embeddings()
+        old_sem = SemanticSearch()
+        old_sem.load()
+        new_sem = SemanticSearch(extra_chunks)
+        new_sem.generate_embeddings()
+        old_sem.embeddings = np.vstack(old_sem.embeddings, new_sem.embeddings)
         dt = time.time() - t0
         print(f"Embedded {len(old_chunks)} chunks in {dt:.3f}s")
 
@@ -186,10 +197,7 @@ def index(max_chunk_size: int = 2000):
                 json.dump(old_index, f, indent=2)
             with open("data/processed/document_length.json", "w") as f:
                 json.dump(old_lengths, f, indent=2)
-            """full_metadata: Dict[str, Any] = {
-                "chunk_size": max_chunk_size, "files": file_metadata
-            }"""
-            sem.save()
+            old_sem.save()
             with open("data/processed/metadata.json", "w") as f:
                 json.dump(old_metadata, f, indent=2)
         except (OSError, json.JSONDecodeError) as e:
