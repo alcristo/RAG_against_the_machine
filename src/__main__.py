@@ -170,6 +170,14 @@ def index(max_chunk_size: int = 2000):
                 old_chunks.update({str(c): v})
             update_index(old_index, old_lengths, new_chunks)
 
+        # re-generate semantic embeddings
+        print("Generating new semantic embeddings...")
+        t0 = time.time()
+        sem = SemanticSearch(old_chunks)
+        sem.generate_embeddings()
+        dt = time.time() - t0
+        print(f"Embedded {len(old_chunks)} chunks in {dt:.3f}s")
+
         # save new data structures
         try:
             with open("data/processed/chunks.json", "w") as f:
@@ -181,6 +189,7 @@ def index(max_chunk_size: int = 2000):
             """full_metadata: Dict[str, Any] = {
                 "chunk_size": max_chunk_size, "files": file_metadata
             }"""
+            sem.save()
             with open("data/processed/metadata.json", "w") as f:
                 json.dump(old_metadata, f, indent=2)
         except (OSError, json.JSONDecodeError) as e:
@@ -190,6 +199,8 @@ def index(max_chunk_size: int = 2000):
             os.remove("data/processed/index.json")
             os.chmod("data/processed/document_length.json", 700)
             os.remove("data/processed/document_length.json")
+            os.chmod("data/processed/embeddings.npy", 700)
+            os.remove("data/processed/embeddings.npy")
             os.chmod("data/processed/metadata.json", 700)
             os.remove("data/processed/metadata.json")
             print(e, file=sys.stderr)
@@ -204,7 +215,7 @@ def index(max_chunk_size: int = 2000):
     except OSError as e:
         print(e, file=sys.stderr)
         return
-    print(f"Chunking finished in {round(dt, 3)}s")
+    print(f"Chunking finished in {dt:.3f}s")
     print(f"Divided {len(files)} files in {len(chunks)} chunks")
 
     # save chunks metadata
@@ -216,14 +227,15 @@ def index(max_chunk_size: int = 2000):
     t0 = time.time()
     index, doc_l = build_index(chunks)
     dt = time.time() - t0
-    print(f"Indexed {len(chunks)} chunks in {round(dt, 3)}s")
+    print(f"Indexed {len(chunks)} chunks in {dt:.3f}s")
 
-    # semantic index
+    # semantic embeddings
     print("Generating semantic embeddings...")
     t0 = time.time()
     sem = SemanticSearch(chunks)
+    sem.generate_embeddings()
     dt = time.time() - t0
-    print(f"Embedded {len(chunks)} chunks in {round(dt, 3)}s")
+    print(f"Embedded {len(chunks)} chunks in {dt:.3f}s")
 
     # save index and configuration files
     try:

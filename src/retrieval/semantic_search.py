@@ -18,6 +18,7 @@ class SemanticSearch:
 
     def generate_embeddings(self):
         self.embeddings = self.model.encode(self.contents)
+        print(f"Embeddings generated; size: {self.embeddings.shape}")
 
     def save(self, path: str = "data/processed/embeddings.npy") -> None:
         np.save(path, self.embeddings)
