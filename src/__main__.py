@@ -1,6 +1,6 @@
-from chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file
-from indexing import build_index, update_index
-from retrieval import BM25
+from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file
+from .indexing import build_index, update_index
+from .retrieval import BM25
 import fire
 from fire.core import FireExit
 from typing import Any, Dict, List
@@ -301,19 +301,20 @@ def evaluate(dataset_path: str, student_search_results_path: str):
     pass
 
 
-COMMANDS = (
-    "index",
-    "search",
-    "search_dataset",
-    "answer",
-    "answer_dataset",
-    "evaluate"
-)
+def main() -> None:
+    fire.Fire({
+        "index": index,
+        "search": search,
+        "search_dataset": search_dataset,
+        "answer": answer,
+        "answer_dataset": answer_dataset,
+        "evaluate": evaluate
+    })
 
 
 if __name__ == "__main__":
     try:
-        fire.Fire()
+        main()
     except KeyboardInterrupt:
         pass
     except FireExit:
