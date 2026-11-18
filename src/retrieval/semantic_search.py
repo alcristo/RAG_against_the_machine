@@ -26,7 +26,7 @@ class SemanticSearch:
     def load(self, path: str = "data/processed/embeddings.npy") -> None:
         self.embeddings = np.load(path)
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str) -> List[Dict[str, Any]]:
         if self.embeddings is None:
             raise ValueError("Embeddings have not been generated.")
 
@@ -35,11 +35,11 @@ class SemanticSearch:
         # calculate cosines with dot product
         scores = np.dot(self.embeddings, query_embedding)
 
-        indices = np.argsort(scores)[::-1][:top_k]
+        indices = np.argsort(scores)[::-1]
 
         return [
             {
-                "document": self.chunks[i].document,
+                "chunk": i,  # self.chunks[i].id,
                 "score": float(scores[i])
             }
             for i in indices

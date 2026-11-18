@@ -1,10 +1,11 @@
 from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file, Chunk
 from .indexing import build_index, update_index
 from .retrieval import BM25, SemanticSearch
+from .models import MinimalSource
 import numpy as np
 import fire
 from fire.core import FireExit
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 import time
 import json
 import sys
@@ -185,7 +186,9 @@ def index(max_chunk_size: int = 2000):
         old_sem.load()
         new_sem = SemanticSearch(extra_chunks)
         new_sem.generate_embeddings()
-        old_sem.embeddings = np.vstack(old_sem.embeddings, new_sem.embeddings)
+        old_sem.embeddings = np.vstack((
+            old_sem.embeddings, new_sem.embeddings
+        ))
         dt = time.time() - t0
         print(f"Embedded {len(old_chunks)} chunks in {dt:.3f}s")
 
@@ -277,6 +280,33 @@ def index(max_chunk_size: int = 2000):
         return
 
 
+def _get_file_content(filename: str, start_index: int, end_index: int) -> str:
+    try:
+        with open(filename) as f:
+            return f.read()[start_index:end_index]
+    except OSError:
+        return ""
+
+
+def _rrf(
+    lex_rank: List[int],
+    sem_rank: List[int],
+    w: float = .5,
+    k: float = 60
+) -> List[Tuple[float, int]]:
+    if w < 0 or w > 1:
+        raise ValueError(f"invalid weight: {w}; must be in [0,1]")
+    if len(lex_rank) != len(sem_rank):
+        raise ValueError("semantic and lexical ranks must have the same size")
+    hybrid_rank: List[Tuple[float, int]] = []
+    for chunk_id in sem_rank:
+        sem_score = w / (k + sem_rank.index(chunk_id))
+        lex_score = (1 - w) / (k + lex_rank.index(chunk_id))
+        hybrid_rank.append((lex_score + sem_score, chunk_id))
+    hybrid_rank.sort(reverse=True)
+    return hybrid_rank
+
+
 def search(query: str, k: int = 5):
     try:
         current_file = "data/processed/chunks.json"
@@ -291,13 +321,29 @@ def search(query: str, k: int = 5):
     except OSError as e:
         print(e, file=sys.stderr)
         return
-    google = BM25(chunks, index, dls)
-    scores = google.sorted_scores(query, k)
-    for key, _ in scores.items():
+    lex_scorer = BM25(chunks, index, dls)
+    lex_scores = lex_scorer.sorted_scores(query, k)
+    sem_scorer = SemanticSearch()
+    """sem_scorer.chunks = [
+        Chunk(chunk_id, mdt["file"], "", mdt["start_index"], mdt["end_index"])
+        for chunk_id, mdt in chunks.items()
+    ]"""
+    sem_scorer.load()
+    sem_scores = sem_scorer.search(query)
+    sem_scores.sort(key=lambda d: d["score"], reverse=True)
+    lex_ranks: List[int] = [x for x in lex_scores.keys()]
+    sem_ranks: List[int] = [int(y["chunk"]) for y in sem_scores]
+    hybrid_ranks = _rrf(lex_ranks, sem_ranks)[:k]
+    for _, i in hybrid_ranks:
+        print(f"{i}: {chunks[str(i)]['file']}")
+        print(f"Start index: {chunks[str(i)]['start_index']}")
+        print(f"End index: {chunks[str(i)]['end_index']}")
+        print()
+    """for key, _ in lex_scores.items():
         print(f"{key}: {chunks[str(key)]['file']}")
         print(f"Start index: {chunks[str(key)]['start_index']}")
         print(f"End index: {chunks[str(key)]['end_index']}")
-        print()
+        print()"""
 
 
 def search_dataset(

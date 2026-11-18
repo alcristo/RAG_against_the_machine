@@ -53,7 +53,7 @@ class BM25:
     def sorted_scores(
         self,
         query: str,
-        k: int = 5,
+        # k: int = 5,
         k1: float = 1.5,
         b: float = .75
     ) -> Dict[int, float]:
@@ -66,7 +66,7 @@ class BM25:
             ), i))
         scores.sort(reverse=True)
         scores_dict: Dict[int, float] = {}
-        for i in range(k):
+        for i in range(len(scores)):
             score, chunk = scores[i]
             scores_dict.update({chunk: score})
         return scores_dict
