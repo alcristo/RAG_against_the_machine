@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List
+from typing_extensions import Self
 import uuid
 
 
@@ -8,6 +9,12 @@ class MinimalSource(BaseModel):
     file_path: str
     first_character_index: int
     last_character_index: int
+
+    @model_validator(mode="after")
+    def validate_length(self) -> Self:
+        if self.last_character_index <= self.first_character_index:
+            raise IndexError("end character index is before start")
+        return self
 
 
 class UnansweredQuestion(BaseModel):
@@ -43,7 +50,7 @@ class StudentSearchResults(BaseModel):
     k: int
 
 
-class StudentSearchResultsandAnswer(BaseModel):
+class StudentSearchResultsAndAnswer(BaseModel):
     """Search results and answer"""
     search_results: List[MinimalAnswer]
     k: int

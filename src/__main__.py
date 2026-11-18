@@ -1,8 +1,18 @@
 from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file, Chunk
 from .indexing import build_index, update_index
 from .retrieval import BM25, SemanticSearch
-from .models import MinimalSource
+from .models import (
+    MinimalSource,
+    UnansweredQuestion,
+    RagDataset,
+    AnsweredQuestion,
+    MinimalSearchResults,
+    MinimalAnswer,
+    StudentSearchResults,
+    StudentSearchResultsAndAnswer
+)
 import numpy as np
+from tqdm import tqdm
 import fire
 from fire.core import FireExit
 from typing import Any, Dict, List, Tuple
@@ -12,7 +22,7 @@ import sys
 import os
 
 
-def index(max_chunk_size: int = 2000):
+def index(max_chunk_size: int = 2000) -> None:
     if max_chunk_size < 500:
         print("max chunk size can't be lower than 500", file=sys.stderr)
         return
@@ -280,14 +290,6 @@ def index(max_chunk_size: int = 2000):
         return
 
 
-def _get_file_content(filename: str, start_index: int, end_index: int) -> str:
-    try:
-        with open(filename) as f:
-            return f.read()[start_index:end_index]
-    except OSError:
-        return ""
-
-
 def _rrf(
     lex_rank: List[int],
     sem_rank: List[int],
@@ -307,7 +309,13 @@ def _rrf(
     return hybrid_rank
 
 
-def search(query: str, k: int = 5):
+def search(query: str, k: int = 5) -> None:
+    question = UnansweredQuestion(question=query)
+    results = MinimalSearchResults(
+        question_id=question.question_id,
+        question=question.question,
+        retrieved_sources=[]
+    )
     try:
         current_file = "data/processed/chunks.json"
         with open(current_file) as f:
@@ -322,22 +330,27 @@ def search(query: str, k: int = 5):
         print(e, file=sys.stderr)
         return
     lex_scorer = BM25(chunks, index, dls)
-    lex_scores = lex_scorer.sorted_scores(query, k)
+    lex_scores = lex_scorer.sorted_scores(question.question, k)
     sem_scorer = SemanticSearch()
     """sem_scorer.chunks = [
         Chunk(chunk_id, mdt["file"], "", mdt["start_index"], mdt["end_index"])
         for chunk_id, mdt in chunks.items()
     ]"""
     sem_scorer.load()
-    sem_scores = sem_scorer.search(query)
-    sem_scores.sort(key=lambda d: d["score"], reverse=True)
+    sem_scores = sem_scorer.search(question.question)
     lex_ranks: List[int] = [x for x in lex_scores.keys()]
     sem_ranks: List[int] = [int(y["chunk"]) for y in sem_scores]
     hybrid_ranks = _rrf(lex_ranks, sem_ranks)[:k]
     for _, i in hybrid_ranks:
-        print(f"{i}: {chunks[str(i)]['file']}")
-        print(f"Start index: {chunks[str(i)]['start_index']}")
-        print(f"End index: {chunks[str(i)]['end_index']}")
+        source = MinimalSource(
+            file_path=chunks[str(i)]['file'],
+            first_character_index=chunks[str(i)]['start_index'],
+            last_character_index=chunks[str(i)]['end_index']
+        )
+        results.retrieved_sources.append(source)
+        print(f"{i}: {source.file_path}")
+        print(f"Start index: {source.first_character_index}")
+        print(f"End index: {source.last_character_index}")
         print()
     """for key, _ in lex_scores.items():
         print(f"{key}: {chunks[str(key)]['file']}")
@@ -348,10 +361,62 @@ def search(query: str, k: int = 5):
 
 def search_dataset(
     dataset_path: str,
-    k: int = 5,
-    save_directory: str = "data/processed/StudentSearchResults.json"
+    k: int,
+    save_directory: str
 ):
-    pass
+    try:
+        current_file = "data/processed/chunks.json"
+        with open(current_file) as f:
+            chunks = json.load(f)
+        current_file = "data/processed/document_length.json"
+        with open(current_file) as f:
+            dls = json.load(f)
+        current_file = "data/processed/index.json"
+        with open(current_file) as f:
+            index = json.load(f)
+        with open(dataset_path) as f:
+            rag_questions_list = json.load(f)["rag_questions"]
+        rag_questions = [UnansweredQuestion(
+            question_id=q["question_id"],
+            question=q["question"]
+        ) for q in rag_questions_list]
+    except OSError as e:
+        print(e, file=sys.stderr)
+        return
+    lex_searcher = BM25(chunks, index, dls)
+    sem_searcher = SemanticSearch()
+    sem_searcher.load()
+    results = StudentSearchResults(search_results=[], k=k)
+    rag_dataset = RagDataset(rag_questions=rag_questions)
+    for question in tqdm(
+        rag_dataset.rag_questions,
+        desc="Searching sources",
+        unit="questions"
+    ):
+        lex_scores = lex_searcher.sorted_scores(question.question)
+        sem_scores = sem_searcher.search(question.question)
+        lex_ranks = [x for x in lex_scores.keys()]
+        sem_ranks = [int(y["chunk"]) for y in sem_scores]
+        hybrid_ranks = _rrf(lex_ranks, sem_ranks)[:k]
+        sources: List[MinimalSource] = []
+        for _, i in hybrid_ranks:
+            sources.append(MinimalSource(
+                file_path=chunks[str(i)]['file'],
+                first_character_index=chunks[str(i)]['start_index'],
+                last_character_index=chunks[str(i)]['end_index']
+            ))
+        results.search_results.append(MinimalSearchResults(
+            question_id=question.question_id,
+            question=question.question,
+            retrieved_sources=sources
+        ))
+    try:
+        os.makedirs("/".join(dataset_path.split('/')[:-1]), exist_ok=True)
+        with open(save_directory, 'w') as f:
+            f.write(results.model_dump_json(indent=2))
+    except OSError as e:
+        print(e)
+        return
 
 
 def answer(query: str, k: int = 5):
@@ -360,8 +425,8 @@ def answer(query: str, k: int = 5):
 
 def answer_dataset(
     student_search_results_path: str,
-    k: int = 5,
-    save_directory: str = "data/processed/StudentSearchResultsAndAnswer.json"
+    k: int,
+    save_directory: str
 ):
     pass
 

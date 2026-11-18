@@ -35,6 +35,7 @@ class SemanticSearch:
         # calculate cosines with dot product
         scores = np.dot(self.embeddings, query_embedding)
 
+        # sort scores and reverse the list
         indices = np.argsort(scores)[::-1]
 
         return [

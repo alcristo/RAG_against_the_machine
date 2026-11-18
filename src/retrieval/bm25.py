@@ -22,10 +22,10 @@ class BM25:
         return re.findall(r"\b\w+\b", text.lower())
 
     def tf(self, term: str, chunk_id: int,) -> int:
-        return self.index[term].get(str(chunk_id), 0)
+        return self.index.get(term, {}).get(str(chunk_id), 0)
 
     def df(self, term: str) -> int:
-        return len(self.index[term])
+        return len(self.index.get(term, {}))
 
     def idf(self, term: str) -> float:
         df = self.df(term)
