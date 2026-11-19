@@ -4,7 +4,7 @@ from typing import Any, List, Dict, Tuple, Iterable
 
 
 def tokenize(text: str) -> List[Any]:
-    text = text.lower().replace('_', ' ')
+    # text = text.lower().replace('_', ' ')
     return re.findall(r"\b\w+\b", text.lower())
 
 

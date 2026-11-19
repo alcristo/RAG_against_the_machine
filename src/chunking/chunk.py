@@ -1,5 +1,7 @@
 from tqdm import tqdm
-from typing import List, Dict, Any
+from markdown_it import MarkdownIt
+import ast
+from typing import List, Tuple, Dict, Any
 
 
 class Chunk:
@@ -20,8 +22,11 @@ class Chunk:
         content: str,
         start_index: int,
         end_index: int,
-        context: str = ""
+        context: str = "",
+        max_chars: int = 2000
     ) -> None:
+        if len(content) > max_chars:
+            raise ValueError(f"chunk exceeds maximum size of {max_chars}")
         self.id = chunk_id
         self.document = doc_id
         self.content = content
@@ -29,12 +34,37 @@ class Chunk:
         self.end_index = end_index
         self.context = context
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "file": self.document,
+            "content": self.content,
+            "start_index": self.start_index,
+            "end_index": self.end_index,
+        }
+
     def dump(self, chunk_dict: Dict[int, Dict[str, Any]]) -> None:
         chunk_dict[self.id] = {
             "file": self.document,
             "start_index": self.start_index,
             "end_index": self.end_index
         }
+
+
+class Unit:
+    def __init__(
+        self,
+        start_index: int,
+        end_index: int,
+        content: str,
+        context: str = "",
+        unit_type: str = ""
+    ) -> None:
+        self.start_index = start_index
+        self.end_index = end_index
+        self.content = content
+        self.context = context
+        self.unit_type = unit_type
 
 
 def recursive_split(
@@ -350,6 +380,325 @@ def chunk_files(
     return chunks
 
 
+def build_line_offsets(source: str) -> List[int]:
+    offsets = [0]
+
+    for line in source.splitlines(keepends=True):
+        offsets.append(offsets[-1] + len(line))
+
+    return offsets
+
+
+def ast_position_to_char_offset(
+        source: str,
+        line_offsets: List[int],
+        lineno: int,
+        byte_col: int
+) -> int:
+    lines = source.splitlines(keepends=True)
+    line = lines[lineno - 1]
+    char_col = len(line.encode("utf-8")[:byte_col].decode("utf-8"))
+    return line_offsets[lineno - 1] + char_col
+
+
+def extract_node_positions(filename: str, chunks: List[Chunk], chunk_id: int):
+    with open(filename) as f:
+        source = f.read()
+    tree = ast.parse(source)
+    line_offsets = build_line_offsets(source)
+    chunk_id = len(chunks)
+    for node in ast.walk(tree):
+        if isinstance(node, (
+            ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef
+        )):
+            start = ast_position_to_char_offset(
+                source, line_offsets, node.lineno, node.col_offset
+            )
+            end = ast_position_to_char_offset(
+                source, line_offsets, node.end_lineno, node.end_col_offset
+            )
+            chunks.append(Chunk(
+                chunk_id, filename, source[start:end], start, end
+            ))
+            chunk_id += 1
+
+
+def extract_md_positions(filename: str, chunks: List[Chunk], chunk_id: int):
+    with open(filename) as f:
+        source = f.read()
+    md = MarkdownIt()
+    tokens = md.parse(source)
+    line_offsets = build_line_offsets(source)
+    for token in tokens:
+        if token.map is None:
+            continue
+
+        start_line, end_line = token.map[:2]
+        start = line_offsets[start_line]
+        end = line_offsets[end_line]
+        chunks.append(Chunk(
+            chunk_id, filename, source[start:end], start, end
+        ))
+        chunk_id += 1
+
+
+def split_oversized_unit(
+    source: str,
+    start: int,
+    end: int,
+    max_chars: int = 2000
+):
+    while end - start > max_chars:
+        limit = start + max_chars
+
+        split_at = source.rfind("\n", start, limit + 1)
+
+        if split_at <= start or split_at < start + max_chars // 2:
+            split_at = limit
+        else:
+            split_at += 1
+
+        yield start, split_at
+        start = split_at
+
+    if start < end:
+        yield start, end
+
+
+"""
+Units:
+[
+    {
+        "start": int,
+        "end": int,
+        "type": str
+    },
+    ...
+]
+"""
+
+
+def create_chunks(
+    source: str,
+    doc_id: str,
+    units: List[Dict[str, Any]],
+    chunk_id: int,
+    max_chars: int = 2000
+) -> List[Chunk]:
+    chunks: List[Chunk] = []
+
+    # sort units by original position
+    units = sorted(units, key=lambda x: x["start"])
+
+    # split oversized semantic units
+    split_units = []
+    for unit in units:
+        start = unit["start"]
+        end = unit["end"]
+
+        if end - start <= max_chars:
+            split_units.append(unit)
+            continue
+
+        for part_start, part_end in split_oversized_unit(
+            source, start, end, max_chars
+        ):
+            split_units.append({
+                **unit,
+                "start": part_start,
+                "end": part_end
+            })
+
+    # assemble chunks
+    current_start, current_end = None, None
+    current_context = []
+    for unit in split_units:
+        start = unit["start"]
+        end = unit["end"]
+
+        if current_start is None:
+            current_start = start
+            current_end = end
+            current_context = [unit.get("context", "")]
+            continue
+
+        # check source span
+        if end - current_start <= max_chars:
+            current_end = max(current_end, end)
+            current_context.append(unit.get("context", ""))
+        else:
+            chunks.append(Chunk(
+                chunk_id,
+                doc_id,
+                source[current_start:current_end],
+                current_start,
+                current_end,
+                " ".join(filter(None, current_context))
+            ))
+            chunk_id += 1
+            current_start = start
+            current_end = end
+            current_context = [unit.get("context", "")]
+
+    # last chunk
+    if current_start is not None:
+        chunks.append(Chunk(
+            chunk_id,
+            doc_id,
+            source[current_start:current_end],
+            current_start,
+            current_end,
+            " ".join(filter(None, current_context))
+        ))
+    return chunks
+
+
+def get_python_units(source: str) -> List[Unit]:
+    tree = ast.parse(source)
+    line_offsets = build_line_offsets(source)
+
+    def get_position(node: ast.stmt) -> Tuple[int, int]:
+        start = ast_position_to_char_offset(
+            source,
+            line_offsets,
+            node.lineno,
+            node.col_offset
+        )
+        end = ast_position_to_char_offset(
+            source,
+            line_offsets,
+            node.end_lineno,
+            node.end_col_offset
+        )
+        return start, end
+    units: List[Unit] = []
+    for node in tree.body:
+
+        # Class:
+        if isinstance(node, ast.ClassDef):
+            class_start, class_end = get_position(node)
+            for child in node.body:
+                if isinstance(child, (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef
+                )):
+                    start, end = get_position(child)
+                    context = (
+                        f"Class: {node.name} | "
+                        f"Method: {child.name}"
+                    )
+                    units.append(Unit(
+                        start, end, source[start:end], context, "method"
+                    ))
+
+            # no methods
+            if not any(
+                isinstance(child, (ast.FunctionDef)) for child in node.body
+            ):
+                units.append(Unit(
+                    class_start,
+                    class_end,
+                    source[class_start:class_end],
+                    f"Class: {node.name}"
+                ))
+
+        # function
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            start, end = get_position(node)
+
+            units.append(Unit(
+                start,
+                end,
+                source[start:end],
+                f"Function {node.name}",
+                "function"
+            ))
+    return sorted(units, key=lambda u: u.start_index)
+
+
+def get_markdown_units(source: str) -> List[Unit]:
+
+    md = MarkdownIt()
+    tokens = md.parse(source)
+    line_offsets = build_line_offsets(source)
+
+    heading_stack: List[Tuple[int, str]] = []
+    units: List[Unit] = []
+    i = 0
+
+    while i < len(tokens):
+        token = tokens[i]
+
+        #identify headings
+        if token.type == "heading_open":
+            level = int(token.tag[1])
+            inline_token = tokens[i + 1]
+            heading = inline_token.content
+            heading_stack.append((level, heading))
+            i += 1
+            continue
+
+        # meaningful Markdown blocks
+        if token.map is not None and token.type in (
+            "paragraph_open", "fence", "code_block", "html_block"
+        ):
+            start_line, end_line = token.map[:2]
+            start = line_offsets[start_line]
+            end = line_offsets[end_line]
+            content = source[start:end]
+            context = " > ".join(heading for _, heading in heading_stack)
+            units.append(Unit(
+                start, end, content, context, token.type
+            ))
+        i += 1
+
+    return units
+
+
+def assemble_chunks(
+    source: str,
+    doc_id: str,
+    units: List[Unit],
+    max_chars: int = 2000
+) -> List[Chunk]:
+    chunks: List[Chunk] = []
+    current_units: List[Unit] = []
+    chunk_id = 0
+
+    def save_chunk():
+        nonlocal chunk_id
+        if not current_units:
+            return
+
+        start = current_units[0].start_index
+        end = current_units[-1].end_index
+        content = source[start:end]
+        contexts = List(Dict.fromkeys(
+            unit.context for unit  in current_units if unit.context
+        ))
+        context = " | ".join(contexts)
+        chunks.append(Chunk(chunk_id, doc_id, content, start, end, context))
+        chunk_id += 1
+
+    for unit in units:
+        if len(unit.content) > max_chars:
+            raise ValueError("Oversized units must be split before assembly")
+        if not current_units:
+            current_units.append(unit)
+            continue
+        candidate_start = current_units[0].start_index
+        candidate_end = unit.end_index
+        if candidate_end - candidate_start <= max_chars:
+            current_units.append(unit)
+        else:
+            save_chunk()
+            current_units = [unit]
+
+    save_chunk()
+
+    return chunks
+
+
 if __name__ == "__main__":
     filename = "src/chunking/index.py"
     with open(filename) as f:
@@ -361,9 +710,9 @@ if __name__ == "__main__":
         chunks.append(Chunk(
             chunk_id=i,
             doc_id=filename,
-            content=chunk,
+            content=chunk[0],
             start_index=sum([len(t) for t in raw[:i]]),
-            end_index=sum([len(t) for t in raw[:i]]) + len(chunk),
+            end_index=sum([len(t) for t in raw[:i]]) + len(chunk[0]),
         ))
     for i, c in enumerate(chunks):
         # print(f"Chunk {i}\n\n{c.content}")
