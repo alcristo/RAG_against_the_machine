@@ -219,5 +219,8 @@ __marimo__/
 
 # project
 data/raw/
-data/storage/
+data/processed/
+data/datasets/
+data/output/
 .ignore/
+moulinette
