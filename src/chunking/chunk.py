@@ -25,7 +25,10 @@ class Chunk:
         context: str = "",
         max_chars: int = 2000
     ) -> None:
-        if len(content) > max_chars:
+        if any((
+            len(content) > max_chars,
+            end_index - start_index - 1 > max_chars
+        )):
             raise ValueError(f"chunk exceeds maximum size of {max_chars}")
         self.id = chunk_id
         self.document = doc_id
@@ -46,6 +49,7 @@ class Chunk:
     def dump(self, chunk_dict: Dict[int, Dict[str, Any]]) -> None:
         chunk_dict[self.id] = {
             "file": self.document,
+            "context": self.context,
             "start_index": self.start_index,
             "end_index": self.end_index
         }
@@ -451,7 +455,7 @@ def split_oversized_unit(
     while end - start > max_chars:
         limit = start + max_chars
 
-        split_at = source.rfind("\n", start, limit + 1)
+        split_at = source.rfind("\n", start, limit)
 
         if split_at <= start or split_at < start + max_chars // 2:
             split_at = limit
@@ -554,7 +558,10 @@ def create_chunks(
 
 
 def get_python_units(source: str) -> List[Unit]:
-    tree = ast.parse(source)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
     line_offsets = build_line_offsets(source)
 
     def get_position(node: ast.stmt) -> Tuple[int, int]:
@@ -629,7 +636,7 @@ def get_markdown_units(source: str) -> List[Unit]:
     while i < len(tokens):
         token = tokens[i]
 
-        #identify headings
+        # identify headings
         if token.type == "heading_open":
             level = int(token.tag[1])
             inline_token = tokens[i + 1]
@@ -659,11 +666,12 @@ def assemble_chunks(
     source: str,
     doc_id: str,
     units: List[Unit],
+    chunk_id: int,
     max_chars: int = 2000
 ) -> List[Chunk]:
     chunks: List[Chunk] = []
     current_units: List[Unit] = []
-    chunk_id = 0
+    # chunk_id = 0
 
     def save_chunk():
         nonlocal chunk_id
@@ -673,22 +681,51 @@ def assemble_chunks(
         start = current_units[0].start_index
         end = current_units[-1].end_index
         content = source[start:end]
-        contexts = List(Dict.fromkeys(
-            unit.context for unit  in current_units if unit.context
+        if len(content) > max_chars:
+            raise ValueError(
+                f"Chunk {chunk_id} exceeds maximum size: "
+                f"{len(content)} > {max_chars}"
+            )
+        contexts = list(Dict.fromkeys(
+            unit.context for unit in current_units if unit.context
         ))
         context = " | ".join(contexts)
-        chunks.append(Chunk(chunk_id, doc_id, content, start, end, context))
+        chunks.append(Chunk(
+            chunk_id, doc_id, content, start, end, context, max_chars
+        ))
         chunk_id += 1
 
     for unit in units:
+
+        # oversized units: split
         if len(unit.content) > max_chars:
-            raise ValueError("Oversized units must be split before assembly")
+
+            # save previously accumulated units
+            save_chunk()
+            current_units = []
+
+            # split unit
+            for start, end in split_oversized_unit(
+                source, unit.start_index, unit.end_index, max_chars
+            ):
+                split_unit = Unit(
+                    start,
+                    end,
+                    source[start:end],
+                    unit.context,
+                    unit.unit_type
+                )
+                current_units.append(split_unit)
+                save_chunk()
+                current_units = []
+            continue
         if not current_units:
             current_units.append(unit)
             continue
         candidate_start = current_units[0].start_index
         candidate_end = unit.end_index
-        if candidate_end - candidate_start <= max_chars:
+        candidate_size = candidate_end - candidate_start
+        if candidate_size <= max_chars:
             current_units.append(unit)
         else:
             save_chunk()

@@ -4,7 +4,7 @@ from typing import Any, List, Dict, Tuple, Iterable
 
 
 def tokenize(text: str) -> List[Any]:
-    # text = text.lower().replace('_', ' ')
+    text = text.lower().replace('_', ' ')
     return re.findall(r"\b\w+\b", text.lower())
 
 
@@ -18,14 +18,14 @@ def build_index(
         bar = tqdm(
             range(len(chunks)),
             desc="Indexing chunks",
-            unit="chunks"
+            unit="ch"
         )
     else:
         bar = range(len(chunks))
     for i in bar:
         c = chunks[i]
         c_id = c.id
-        text = c.content
+        text = c.context + "\n\n" + c.content
         tokens: List[str] = tokenize(text)
         document_lengths[c_id] = len(tokens)
         for token in tokens:

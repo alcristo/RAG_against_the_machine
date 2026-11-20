@@ -1,4 +1,14 @@
-from .chunking import get_py_md_files, get_file_metadata, chunk_files, chunk_one_file, Chunk
+from .chunking import (
+    get_py_md_files,
+    get_file_metadata,
+    chunk_files,
+    chunk_one_file,
+    Chunk,
+    Unit,
+    get_python_units,
+    get_markdown_units,
+    assemble_chunks
+)
 from .indexing import build_index, update_index
 from .retrieval import BM25, SemanticSearch
 from .models import (
@@ -229,13 +239,31 @@ def index(max_chunk_size: int = 2000) -> None:
         return
 
     # chunk files
-    try:
+    """try:
         t0 = time.time()
         chunks = chunk_files(files, max_chunk_size)
         dt = time.time() - t0
     except OSError as e:
         print(e, file=sys.stderr)
+        return"""
+    print("Chunking files...")
+    t0 = time.time()
+    chunks: List[Chunk] = []
+    try:
+        for fn in tqdm(files, desc="Chunking files", unit="f"):
+            with open(fn) as f:
+                source = f.read()
+            if fn.endswith(".py"):
+                units = get_python_units(source)
+            else:
+                units = get_markdown_units(source)
+            chunks.extend(assemble_chunks(
+                source, fn, units, len(chunks), max_chunk_size
+            ))
+    except OSError as e:
+        print(e)
         return
+    dt = time.time() - t0
     print(f"Chunking finished in {dt:.3f}s")
     print(f"Divided {len(files)} files in {len(chunks)} chunks")
 
@@ -245,6 +273,7 @@ def index(max_chunk_size: int = 2000) -> None:
         file_metadata[filename]["chunks"].append(c.id)
 
     # index chunks
+    print("Indexing chunks...")
     t0 = time.time()
     index, doc_l = build_index(chunks)
     dt = time.time() - t0
@@ -391,7 +420,7 @@ def search_dataset(
     for question in tqdm(
         rag_dataset.rag_questions,
         desc="Searching sources",
-        unit="questions"
+        unit="q"
     ):
         lex_scores = lex_searcher.sorted_scores(question.question)
         sem_scores = sem_searcher.search(question.question)

@@ -7,7 +7,7 @@ class SemanticSearch:
     def __init__(self, chunks: Optional[List[Any]] = None) -> None:
         if chunks:
             self.chunks = chunks
-            self.contents = [c.content for c in chunks]
+            self.contents = [c.context + "\n\n" + c.content.lower().replace('_', ' ') for c in chunks]
         else:
             self.chunks, self.contents = [], []
         from static_embed_runner import StaticEmbedRunner
@@ -30,7 +30,7 @@ class SemanticSearch:
         if self.embeddings is None:
             raise ValueError("Embeddings have not been generated.")
 
-        query_embedding = self.model.encode(query)
+        query_embedding = self.model.encode(query.lower().replace('_', ' '))
 
         # calculate cosines with dot product
         scores = np.dot(self.embeddings, query_embedding)
