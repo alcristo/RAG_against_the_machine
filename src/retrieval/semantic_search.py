@@ -1,15 +1,16 @@
 import numpy as np
+import json
 from typing import List, Dict, Any, Optional
 
 
 class SemanticSearch:
 
     def __init__(self, chunks: Optional[List[Any]] = None) -> None:
+        self.chunk_ids: List[int] = []
+        self.contents: List[str] = []
         if chunks:
-            self.chunks = chunks
-            self.contents = [c.context + "\n\n" + c.content.lower().replace('_', ' ') for c in chunks]
-        else:
-            self.chunks, self.contents = [], []
+            self.chunk_ids = [c.id for c in chunks]
+            self.contents = [c.context + "\n\n" + c.content for c in chunks]
         from static_embed_runner import StaticEmbedRunner
         self.model = StaticEmbedRunner.load(
             "sentence-transformers/static-retrieval-mrl-en-v1"
@@ -24,6 +25,9 @@ class SemanticSearch:
         np.save(path, self.embeddings)
 
     def load(self, path: str = "data/processed/embeddings.npy") -> None:
+        with open("data/processed/chunks.json") as f:
+            chunk_dict = json.load(f)
+            self.chunk_ids = [int(k) for k in chunk_dict.keys()]
         self.embeddings = np.load(path)
 
     def search(self, query: str) -> List[Dict[str, Any]]:
@@ -40,7 +44,7 @@ class SemanticSearch:
 
         return [
             {
-                "chunk": i,  # self.chunks[i].id,
+                "chunk": self.chunk_ids[i],
                 "score": float(scores[i])
             }
             for i in indices

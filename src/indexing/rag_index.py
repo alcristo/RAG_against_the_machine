@@ -4,8 +4,18 @@ from typing import Any, List, Dict, Tuple, Iterable
 
 
 def tokenize(text: str) -> List[Any]:
-    text = text.lower().replace('_', ' ')
-    return re.findall(r"\b\w+\b", text.lower())
+    """text = text.lower().replace('_', ' ')
+    return re.findall(r"\b\w+\b", text.lower())"""
+    text = text.lower()
+    tokens = re.findall(r"[a-zA-Z0-9_]+", text)
+    result: List[Any] = []
+    for token in tokens:
+        result.append(token)
+
+        # extract underscore-separated components
+        if "_" in token:
+            result.extend(token.split("_"))
+    return result
 
 
 def build_index(

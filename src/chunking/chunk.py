@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
 import ast
 from typing import List, Tuple, Dict, Any
 
@@ -469,19 +470,6 @@ def split_oversized_unit(
         yield start, end
 
 
-"""
-Units:
-[
-    {
-        "start": int,
-        "end": int,
-        "type": str
-    },
-    ...
-]
-"""
-
-
 def create_chunks(
     source: str,
     doc_id: str,
@@ -557,7 +545,7 @@ def create_chunks(
     return chunks
 
 
-def get_python_units(source: str) -> List[Unit]:
+"""def get_python_units(source: str) -> List[Unit]:
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -620,10 +608,129 @@ def get_python_units(source: str) -> List[Unit]:
                 f"Function {node.name}",
                 "function"
             ))
-    return sorted(units, key=lambda u: u.start_index)
+
+        # other (imports, constants, docstrings, ...)
+        else:
+            start, end = get_position(node)
+
+            units.append(Unit(
+                start,
+                end,
+                source[start:end],
+                "Module",
+                "module"
+            ))
+    return sorted(units, key=lambda u: u.start_index)"""
 
 
-def get_markdown_units(source: str) -> List[Unit]:
+def get_python_units(source: str) -> List[Unit]:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    lines = source.splitlines(keepends=True)
+    line_offsets = build_line_offsets(source)
+
+    units: List[Unit] = []
+
+    def position_to_offset(lineno: int, byte_col: int) -> int:
+        line = lines[lineno - 1]
+        char_col = len(line.encode("utf-8")[:byte_col].decode("utf-8"))
+        return line_offsets[lineno - 1] + char_col
+
+    def get_position(node: ast.stmt) -> Tuple[int, int]:
+        start_line = node.lineno
+        end_line = node.end_lineno
+
+        decorators = getattr(node, "decorator_list", [])
+
+        if decorators:
+            start_line = min(
+                start_line, *(decorator.lineno for decorator in decorators)
+            )
+
+        start = position_to_offset(
+            start_line,
+            0 if start_line != node.lineno else node.col_offset
+        )
+        end = position_to_offset(end_line, node.end_col_offset)
+        return start, end
+
+    def add_unit(node: ast.stmt, context: str, unit_type: str) -> None:
+        start, end = get_position(node)
+
+        if start >= end:
+            return
+
+        units.append(Unit(start, end, source[start:end], context, unit_type))
+
+    def is_function(node: ast.stmt) -> bool:
+        return isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+
+    def visit_function(
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        parents: List[str]
+    ) -> None:
+        name: str = node.name
+
+        context_parts = parents + [f"Function: {name}"]
+        context = " > ".join(context_parts)
+
+        # index the complete function
+        add_unit(node, context, "function")
+
+        # nested functions and classes
+        for child in node.body:
+            if is_function(child):
+                visit_function(child, context_parts)
+            elif isinstance(child, ast.ClassDef):
+                visit_class(child, context_parts)
+
+    def visit_class(node: ast.ClassDef, parents: List[str]) -> None:
+        context_parts = parents + [f"Class: {node.name}"]
+        context = " > ".join(context_parts)
+
+        # preserve class declaration; no method duplication
+        if node.body:
+            first_start, _ = get_position(node.body[0])
+            class_start, _ = get_position(node)
+
+            if class_start < first_start:
+                units.append(Unit(
+                    class_start,
+                    first_start,
+                    source[class_start:first_start],
+                    context,
+                    "class_header"
+                ))
+        else:
+            add_unit(node, context, "class")
+
+        # visit direct class members
+        for child in node.body:
+            if is_function(child):
+                visit_function(child, context_parts)
+            elif isinstance(child, ast.ClassDef):
+                visit_class(child, context_parts)
+            else:
+                # class attributes, docstrings, etc.
+                add_unit(child, context, "class_member")
+
+    # module-level statements
+    for node in tree.body:
+        if is_function(node):
+            visit_function(node, [])
+        elif isinstance(node, ast.ClassDef):
+            visit_class(node, [])
+        else:
+            # imports, constants, assignments, module docstrings, etc.
+            add_unit(node, "Module", "module")
+
+    return sorted(units, key=lambda unit: (unit.start_index, unit.end_index))
+
+
+"""def get_markdown_units(source: str) -> List[Unit]:
 
     md = MarkdownIt()
     tokens = md.parse(source)
@@ -639,6 +746,9 @@ def get_markdown_units(source: str) -> List[Unit]:
         # identify headings
         if token.type == "heading_open":
             level = int(token.tag[1])
+            # return to a higher level: remove all lower levels
+            while heading_stack and heading_stack[-1][0] >= level:
+                heading_stack.pop()
             inline_token = tokens[i + 1]
             heading = inline_token.content
             heading_stack.append((level, heading))
@@ -659,7 +769,101 @@ def get_markdown_units(source: str) -> List[Unit]:
             ))
         i += 1
 
-    return units
+    return units"""
+
+
+def get_markdown_units(source: str) -> List[Unit]:
+
+    md = MarkdownIt().enable("table")
+    tokens = md.parse(source)
+
+    line_offsets = build_line_offsets(source)
+    heading_stack: List[Tuple[int, str]] = []
+    units: List[Unit] = []
+    i = 0
+
+    # extract as complete blocks
+    containers = {
+        "bullet_list_open": "list",
+        "ordered_list_open": "list",
+        "blockquote_open": "blockquote",
+        "table_open": "table"
+    }
+
+    # individual blocks
+    blocks = {
+        "paragraph_open": "paragraph",
+        "fence": "code",
+        "code_block": "code",
+        "htlm_block": "html"
+    }
+
+    def add_unit(token: Token, context: str, unit_type: str) -> None:
+        if token.map is None:
+            return
+
+        start_line, end_line = token.map
+        start = line_offsets[start_line]
+        end = line_offsets[end_line]
+
+        if start >= end:
+            return
+
+        units.append(Unit(start, end, source[start:end], context, unit_type))
+
+    i = 0
+
+    while i < len(tokens):
+        token = tokens[i]
+
+        # update heading hierarchy
+        if token.type == "heading_open":
+            level = int(token.tag[1])
+
+            while heading_stack and heading_stack[-1][0] >= level:
+                heading_stack.pop()
+
+            heading = tokens[i + 1].content
+
+            heading_stack.append((level, heading))
+
+            i += 1
+            continue
+
+        context = " > ".join([head for _, head in heading_stack])
+
+        # extract containers
+        if token.type in containers:
+            unit_type = containers[token.type]
+
+            add_unit(token, context, unit_type)
+
+            # skip nested tokens until closing token
+            depth = 1
+            opening_type = token.type
+            closing_type = opening_type.replace("_open", "_close")
+
+            i += 1
+
+            while i < len(tokens) and depth > 0:
+                current = tokens[i]
+
+                if current.type == opening_type:
+                    depth += 1
+                elif current.type == closing_type:
+                    depth -= 1
+
+                i += 1
+
+            continue
+
+        # individual blocks
+        if token.type in blocks:
+            add_unit(token, context, blocks[token.type])
+
+        i += 1
+
+    return sorted(units, key=lambda unit: unit.start_index)
 
 
 def assemble_chunks(
@@ -667,7 +871,8 @@ def assemble_chunks(
     doc_id: str,
     units: List[Unit],
     chunk_id: int,
-    max_chars: int = 2000
+    max_chars: int = 2000,
+    overlap_units: int = 1
 ) -> List[Chunk]:
     chunks: List[Chunk] = []
     current_units: List[Unit] = []
@@ -725,11 +930,30 @@ def assemble_chunks(
         candidate_start = current_units[0].start_index
         candidate_end = unit.end_index
         candidate_size = candidate_end - candidate_start
-        if candidate_size <= max_chars:
+        same_context = current_units[-1].context == unit.context
+        if candidate_size <= max_chars and same_context:
             current_units.append(unit)
         else:
+            previous_units = current_units.copy()
             save_chunk()
-            current_units = [unit]
+
+            overlap: List[Unit] = []
+            for previous in reversed(previous_units):
+                if len(overlap) >= overlap_units:
+                    break
+
+                candidate_overlap = [previous] + overlap
+
+                overlap_start = candidate_overlap[0].start_index
+                overlap_size = unit.end_index - overlap_start
+
+                if overlap_size > max_chars:
+                    break
+
+                overlap = candidate_overlap
+
+            # start new chunk with overlap
+            current_units = overlap + [unit]
 
     save_chunk()
 

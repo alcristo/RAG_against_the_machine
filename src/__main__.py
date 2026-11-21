@@ -246,7 +246,6 @@ def index(max_chunk_size: int = 2000) -> None:
     except OSError as e:
         print(e, file=sys.stderr)
         return"""
-    print("Chunking files...")
     t0 = time.time()
     chunks: List[Chunk] = []
     try:
@@ -264,8 +263,10 @@ def index(max_chunk_size: int = 2000) -> None:
         print(e)
         return
     dt = time.time() - t0
-    print(f"Chunking finished in {dt:.3f}s")
-    print(f"Divided {len(files)} files in {len(chunks)} chunks")
+    # print(f"Chunking finished in {dt:.3f}s")
+    print(
+        f"Took {dt:.3f}s to divide {len(files)} files in {len(chunks)} chunks"
+    )
 
     # save chunks metadata
     for c in chunks:
@@ -273,7 +274,6 @@ def index(max_chunk_size: int = 2000) -> None:
         file_metadata[filename]["chunks"].append(c.id)
 
     # index chunks
-    print("Indexing chunks...")
     t0 = time.time()
     index, doc_l = build_index(chunks)
     dt = time.time() - t0
@@ -300,7 +300,9 @@ def index(max_chunk_size: int = 2000) -> None:
         with open("data/processed/document_length.json", "w") as f:
             json.dump(doc_l, f, indent=2)
         sem.save()
-        full_metadata = {"chunk_size": max_chunk_size, "files": file_metadata}
+        full_metadata: Dict[str, Any] = {
+            "chunk_size": max_chunk_size, "files": file_metadata
+        }
         if not old_metadata:
             with open("data/processed/metadata.json", "w") as f:
                 json.dump(full_metadata, f, indent=2)
@@ -322,20 +324,20 @@ def index(max_chunk_size: int = 2000) -> None:
 def _rrf(
     lex_rank: List[int],
     sem_rank: List[int],
-    w: float = .5,
+    w: float = 0.1,
     k: float = 60
 ) -> List[Tuple[float, int]]:
     if w < 0 or w > 1:
         raise ValueError(f"invalid weight: {w}; must be in [0,1]")
-    if len(lex_rank) != len(sem_rank):
-        raise ValueError("semantic and lexical ranks must have the same size")
-    hybrid_rank: List[Tuple[float, int]] = []
-    for chunk_id in sem_rank:
-        sem_score = w / (k + sem_rank.index(chunk_id))
-        lex_score = (1 - w) / (k + lex_rank.index(chunk_id))
-        hybrid_rank.append((lex_score + sem_score, chunk_id))
-    hybrid_rank.sort(reverse=True)
-    return hybrid_rank
+    scores: Dict[int, float] = {}
+    for rank, chunk_id in enumerate(sem_rank):
+        scores[chunk_id] = scores.get(chunk_id, 0) + w / (k + rank + 1)
+    for rank, chunk_id in enumerate(lex_rank):
+        scores[chunk_id] = scores.get(chunk_id, 0) + (1 - w) / (k + rank + 1)
+    return sorted(
+        [(score, chunk_id) for chunk_id, score in scores.items()],
+        reverse=True
+    )
 
 
 def search(query: str, k: int = 5) -> None:
@@ -361,10 +363,6 @@ def search(query: str, k: int = 5) -> None:
     lex_scorer = BM25(chunks, index, dls)
     lex_scores = lex_scorer.sorted_scores(question.question, k)
     sem_scorer = SemanticSearch()
-    """sem_scorer.chunks = [
-        Chunk(chunk_id, mdt["file"], "", mdt["start_index"], mdt["end_index"])
-        for chunk_id, mdt in chunks.items()
-    ]"""
     sem_scorer.load()
     sem_scores = sem_scorer.search(question.question)
     lex_ranks: List[int] = [x for x in lex_scores.keys()]
@@ -381,11 +379,6 @@ def search(query: str, k: int = 5) -> None:
         print(f"Start index: {source.first_character_index}")
         print(f"End index: {source.last_character_index}")
         print()
-    """for key, _ in lex_scores.items():
-        print(f"{key}: {chunks[str(key)]['file']}")
-        print(f"Start index: {chunks[str(key)]['start_index']}")
-        print(f"End index: {chunks[str(key)]['end_index']}")
-        print()"""
 
 
 def search_dataset(

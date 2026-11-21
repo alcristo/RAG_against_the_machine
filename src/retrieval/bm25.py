@@ -18,8 +18,18 @@ class BM25:
         self.avgdl = sum(document_lengths.values()) / self.n
 
     def tokenize_string(self, text: str) -> List[Any]:
-        text = text.lower().replace('_', ' ')
-        return re.findall(r"\b\w+\b", text.lower())
+        """text = text.lower().replace('_', ' ')
+        return re.findall(r"\b\w+\b", text.lower())"""
+        text = text.lower()
+        tokens = re.findall(r"[a-zA-Z0-9_]+", text)
+        result: List[Any] = []
+        for token in tokens:
+            result.append(token)
+
+            # extract underscore-separated components
+            if "_" in token:
+                result.extend(token.split("_"))
+        return result
 
     def tf(self, term: str, chunk_id: int,) -> int:
         return self.index.get(term, {}).get(str(chunk_id), 0)
@@ -57,16 +67,27 @@ class BM25:
         k1: float = 1.5,
         b: float = .75
     ) -> Dict[int, float]:
+
         if b < 0 or b > 1:
             b = .75
         scores: List[Tuple[float, int]] = []
-        for i in range(self.n):
+        for chunk_id in self.lengths:
             scores.append((self.chunk_score(
-                query, i, k1, b
-            ), i))
+                query, int(chunk_id), k1, b
+            ), int(chunk_id)))
         scores.sort(reverse=True)
-        scores_dict: Dict[int, float] = {}
-        for i in range(len(scores)):
-            score, chunk = scores[i]
-            scores_dict.update({chunk: score})
-        return scores_dict
+        return {chunk_id: score for score, chunk_id in scores}
+        """if b < 0 or b > 1:
+            b = .75
+        candidates: set[int] = set()
+        for term in self.tokenize_string(query):
+            candidates.update(
+                int(chunk_id) for chunk_id in self.index.get(term, {})
+            )
+        scores: List[Tuple[float, int]] = []
+        for chunk_id in candidates:
+            scores.append((self.chunk_score(
+                query, int(chunk_id), k1, b
+            ), int(chunk_id)))
+        scores.sort(reverse=True)
+        return {chunk_id: score for score, chunk_id in scores}"""
