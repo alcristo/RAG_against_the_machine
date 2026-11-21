@@ -35,7 +35,13 @@ def build_index(
     for i in bar:
         c = chunks[i]
         c_id = c.id
-        text = c.context + "\n\n" + c.content
+        text = (
+            c.document.removeprefix("data/raw/vllm-0.10.1/")
+            + "\n\n"
+            + c.context
+            + "\n\n"
+            + c.content
+        )
         tokens: List[str] = tokenize(text)
         document_lengths[c_id] = len(tokens)
         for token in tokens:

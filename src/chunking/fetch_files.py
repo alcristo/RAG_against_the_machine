@@ -30,7 +30,7 @@ def get_important_files(files: List[str]) -> List[str]:
     important: List[str] = []
     for f in files:
         extension = f.split('.')[-1]
-        if extension in ("md", "py"):
+        if extension in ("md", "py", "txt"):
             important.append(f)
     return important
 
@@ -44,7 +44,7 @@ def get_py_md_files(dir: str) -> List[str]:
     important: List[str] = []
     for f in all_files:
         extension = f.split('.')[-1]
-        if extension in ("md", "py"):
+        if extension in ("md", "py", "txt"):
             important.append(f)
     return important
 

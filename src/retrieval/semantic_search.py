@@ -10,7 +10,14 @@ class SemanticSearch:
         self.contents: List[str] = []
         if chunks:
             self.chunk_ids = [c.id for c in chunks]
-            self.contents = [c.context + "\n\n" + c.content for c in chunks]
+            self.contents = [
+                f"Document: {c.document.removeprefix('data/raw/vllm-0.10.1/')}"
+                + "\n\n"
+                + c.context
+                + "\n\n"
+                + c.content
+                for c in chunks
+            ]
         from static_embed_runner import StaticEmbedRunner
         self.model = StaticEmbedRunner.load(
             "sentence-transformers/static-retrieval-mrl-en-v1"

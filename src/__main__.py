@@ -210,7 +210,13 @@ def index(max_chunk_size: int = 2000) -> None:
             old_sem.embeddings, new_sem.embeddings
         ))
         dt = time.time() - t0
-        print(f"Embedded {len(old_chunks)} chunks in {dt:.3f}s")
+        if dt < 60:
+            print(f"Embedded {len(old_chunks)} chunks in {dt:.3f}s")
+        else:
+            print(
+                f"Embedded {len(old_chunks)} chunks in "
+                f"{dt % 60}min {dt // 60:.3f}s"
+            )
 
         # save new data structures
         try:
@@ -263,10 +269,16 @@ def index(max_chunk_size: int = 2000) -> None:
         print(e)
         return
     dt = time.time() - t0
-    # print(f"Chunking finished in {dt:.3f}s")
-    print(
-        f"Took {dt:.3f}s to divide {len(files)} files in {len(chunks)} chunks"
-    )
+    if dt < 60:
+        print(
+            f"Took {dt:.3f}s "
+            f"to divide {len(files)} files in {len(chunks)} chunks"
+        )
+    else:
+        print(
+            f"Took {dt % 60}min {dt // 60:.3f}s "
+            f"to divide {len(files)} files in {len(chunks)} chunks"
+        )
 
     # save chunks metadata
     for c in chunks:
@@ -277,7 +289,10 @@ def index(max_chunk_size: int = 2000) -> None:
     t0 = time.time()
     index, doc_l = build_index(chunks)
     dt = time.time() - t0
-    print(f"Indexed {len(chunks)} chunks in {dt:.3f}s")
+    if dt < 60:
+        print(f"Indexed {len(chunks)} chunks in {dt:.3f}s")
+    else:
+        print(f"Indexed {len(chunks)} chunks in {dt % 60} {dt // 60:.3f}s")
 
     # semantic embeddings
     print("Generating semantic embeddings...")
@@ -285,7 +300,13 @@ def index(max_chunk_size: int = 2000) -> None:
     sem = SemanticSearch(chunks)
     sem.generate_embeddings()
     dt = time.time() - t0
-    print(f"Embedded {len(chunks)} chunks in {dt:.3f}s")
+    if dt < 60:
+        print(f"Embedded {len(chunks)} chunks in {dt:.3f}s")
+    else:
+        print(
+            f"Embedded {len(chunks)} chunks in "
+            f"{dt % 60}min {dt // 60:.3f}s"
+        )
 
     # save index and configuration files
     try:
