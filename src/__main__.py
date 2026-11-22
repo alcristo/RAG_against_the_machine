@@ -215,7 +215,7 @@ def index(max_chunk_size: int = 2000) -> None:
         else:
             print(
                 f"Embedded {len(old_chunks)} chunks in "
-                f"{dt % 60}min {dt // 60:.3f}s"
+                f"{dt // 60}min {dt % 60:.3f}s"
             )
 
         # save new data structures
@@ -276,7 +276,7 @@ def index(max_chunk_size: int = 2000) -> None:
         )
     else:
         print(
-            f"Took {dt % 60}min {dt // 60:.3f}s "
+            f"Took {dt // 60}min {dt % 60:.3f}s "
             f"to divide {len(files)} files in {len(chunks)} chunks"
         )
 
@@ -292,7 +292,7 @@ def index(max_chunk_size: int = 2000) -> None:
     if dt < 60:
         print(f"Indexed {len(chunks)} chunks in {dt:.3f}s")
     else:
-        print(f"Indexed {len(chunks)} chunks in {dt % 60} {dt // 60:.3f}s")
+        print(f"Indexed {len(chunks)} chunks in {dt // 60}min {dt % 60:.3f}s")
 
     # semantic embeddings
     print("Generating semantic embeddings...")
@@ -305,7 +305,7 @@ def index(max_chunk_size: int = 2000) -> None:
     else:
         print(
             f"Embedded {len(chunks)} chunks in "
-            f"{dt % 60}min {dt // 60:.3f}s"
+            f"{dt // 60}min {dt % 60:.3f}s"
         )
 
     # save index and configuration files
@@ -362,6 +362,9 @@ def _rrf(
 
 
 def search(query: str, k: int = 5) -> None:
+    if not 0 < k <= 50:
+        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
+        return
     question = UnansweredQuestion(question=query)
     results = MinimalSearchResults(
         question_id=question.question_id,
@@ -407,6 +410,9 @@ def search_dataset(
     k: int,
     save_directory: str
 ):
+    if not 0 < k <= 50:
+        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
+        return
     try:
         current_file = "data/processed/chunks.json"
         with open(current_file) as f:
@@ -463,7 +469,9 @@ def search_dataset(
 
 
 def answer(query: str, k: int = 5):
-    pass
+    if not 0 < k <= 50:
+        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
+        return
 
 
 def answer_dataset(
@@ -471,7 +479,9 @@ def answer_dataset(
     k: int,
     save_directory: str
 ):
-    pass
+    if not 0 < k <= 50:
+        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
+        return
 
 
 def evaluate(dataset_path: str, student_search_results_path: str):
