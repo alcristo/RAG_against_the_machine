@@ -301,7 +301,7 @@ def index(max_chunk_size: int = 2000) -> None:
     sem.generate_embeddings()
     dt = time.time() - t0
     if dt < 60:
-        print(f"Embedded {len(chunks)} chunks in {dt:.3f}s")
+        print(f"Embedded {len(chunks):.0f} chunks in {dt:.3f}s")
     else:
         print(
             f"Embedded {len(chunks)} chunks in "
@@ -324,9 +324,8 @@ def index(max_chunk_size: int = 2000) -> None:
         full_metadata: Dict[str, Any] = {
             "chunk_size": max_chunk_size, "files": file_metadata
         }
-        if not old_metadata:
-            with open("data/processed/metadata.json", "w") as f:
-                json.dump(full_metadata, f, indent=2)
+        with open("data/processed/metadata.json", "w") as f:
+            json.dump(full_metadata, f, indent=2)
     except (OSError, json.JSONDecodeError) as e:
         os.chmod("data/processed/chunks.json", 700)
         os.remove("data/processed/chunks.json")
@@ -361,10 +360,9 @@ def _rrf(
     )
 
 
-def search(query: str, k: int = 5) -> None:
-    if not 0 < k <= 50:
-        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
-        return
+def search(query: str, k: int = 5) -> MinimalSearchResults | None:
+    if k <= 0 or k > 50:
+        raise SystemExit(f"invalid k value: {k}; 0 < k ≤ 50")
     question = UnansweredQuestion(question=query)
     results = MinimalSearchResults(
         question_id=question.question_id,
@@ -382,8 +380,7 @@ def search(query: str, k: int = 5) -> None:
         with open(current_file) as f:
             index = json.load(f)
     except OSError as e:
-        print(e, file=sys.stderr)
-        return
+        raise SystemExit(e)
     lex_scorer = BM25(chunks, index, dls)
     lex_scores = lex_scorer.sorted_scores(question.question, k)
     sem_scorer = SemanticSearch()
@@ -399,10 +396,7 @@ def search(query: str, k: int = 5) -> None:
             last_character_index=chunks[str(i)]['end_index']
         )
         results.retrieved_sources.append(source)
-        print(f"{i}: {source.file_path}")
-        print(f"Start index: {source.first_character_index}")
-        print(f"End index: {source.last_character_index}")
-        print()
+    return results
 
 
 def search_dataset(
@@ -430,6 +424,14 @@ def search_dataset(
             question=q["question"]
         ) for q in rag_questions_list]
     except OSError as e:
+        print(e, file=sys.stderr)
+        return
+    try:
+        with open(save_directory, "a") as f:
+            pass
+    except FileNotFoundError:
+        pass
+    except PermissionError as e:
         print(e, file=sys.stderr)
         return
     lex_searcher = BM25(chunks, index, dls)
@@ -472,6 +474,7 @@ def answer(query: str, k: int = 5):
     if not 0 < k <= 50:
         print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
         return
+    sources = search(query, k)
 
 
 def answer_dataset(
@@ -482,6 +485,16 @@ def answer_dataset(
     if not 0 < k <= 50:
         print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
         return
+    try:
+        with open(save_directory, "a") as f:
+            pass
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        print(e, file=sys.stderr)
+        return
+    with open(student_search_results_path) as f:
+        results = StudentSearchResults.model_json_schema(f.read())
 
 
 def evaluate(dataset_path: str, student_search_results_path: str):
@@ -504,5 +517,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         pass
+    except (SystemExit, OSError) as e:
+        print(e, file=sys.stderr)
     except FireExit:
         pass
