@@ -20,7 +20,7 @@ install:
 	@rm -f .venv
 	@mkdir -p .venv
 	@if [ ! -L .venv ]; then $(RM) .venv && ln -s $(UV_PROJECT_ENVIRONMENT) .venv; fi
-	uv sync
+	@uv sync
 
 help:
 	@echo "make sync                                                                     - Install the dependencies"
@@ -38,39 +38,39 @@ help:
 	@echo "make lint-strict                                                              - Check strict type hints"
 
 index: install
-	uv run $(PYTHON) -m $(SOURCES) index $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) index $(ARGS)
 
 search: install
-	uv run $(PYTHON) -m $(SOURCES) search $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) search $(ARGS)
 
 search_dataset: install
-	uv run $(PYTHON) -m $(SOURCES) search_dataset $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) search_dataset $(ARGS)
 
 answer: install
-	uv run $(PYTHON) -m $(SOURCES) answer $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) answer $(ARGS)
 
 answer_dataset: install
-	uv run $(PYTHON) -m $(SOURCES) answer_dataset $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) answer_dataset $(ARGS)
 
 evaluate: install
-	uv run $(PYTHON) -m $(SOURCES) evaluate $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) evaluate $(ARGS)
 
 run: install
-	uv run $(PYTHON) -m $(SOURCES) $(ARGS)
+	@uv run $(PYTHON) -m $(SOURCES) $(ARGS)
 
 debug: install
-	uv run $(PYTHON) -m $(PDB) $(SOURCES)
+	@uv run $(PYTHON) -m $(PDB) $(SOURCES)
 
 clean:
 	@find . -path "*__pycache__" -exec rm -rf {} \;
 	@find . -path ".mypy_cache" -exec rm -rf {} \;
 
 lint: install
-	uv run $(LINT) flake8 $(SOURCES)
-	uv run $(LINT) mypy $(SOURCES) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	@uv run $(LINT) flake8 $(SOURCES)
+	@uv run $(LINT) mypy $(SOURCES) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
 lint-strict: install
-	uv run $(LINT) flake8 $(SOURCES)
-	uv run $(LINT) mypy $(SOURCES) --strict
+	@uv run $(LINT) flake8 $(SOURCES)
+	@uv run $(LINT) mypy $(SOURCES) --strict
 
 .PHONY: install index search search_dataset answer answer_dataset evaluate run debug clean lint lint-strict
