@@ -40,7 +40,7 @@ help:
 index: install
 	uv run $(PYTHON) -m $(SOURCES) index $(ARGS)
 
-search: install index
+search: install
 	uv run $(PYTHON) -m $(SOURCES) search $(ARGS)
 
 search_dataset: install
