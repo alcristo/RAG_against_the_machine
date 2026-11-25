@@ -11,6 +11,7 @@ from .chunking import (
 )
 from .indexing import build_index, update_index
 from .retrieval import BM25, SemanticSearch
+from .answer import load_model, generate_rag_answer
 from .models import (
     MinimalSource,
     UnansweredQuestion,
@@ -462,7 +463,7 @@ def search_dataset(
             retrieved_sources=sources
         ))
     try:
-        os.makedirs("/".join(dataset_path.split('/')[:-1]), exist_ok=True)
+        os.makedirs("/".join(save_directory.split('/')[:-1]), exist_ok=True)
         with open(save_directory, 'w') as f:
             f.write(results.model_dump_json(indent=2))
     except OSError as e:
@@ -470,31 +471,89 @@ def search_dataset(
         return
 
 
-def answer(query: str, k: int = 5):
+def answer(query: str, k: int = 5) -> MinimalAnswer:
     if not 0 < k <= 50:
         print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
         return
+    print("Searching sources...")
+    t0 = time.time()
     sources = search(query, k)
+    dt = time.time() - t0
+    if dt < 60:
+        print(f"Search finished in {dt:.3f}s")
+    else:
+        print(f"Search finished in {int(dt // 60)}min {dt % 60:.3f}s")
+    print("Loading model...")
+    model, tokenizer = load_model()
+    print("Loaded model.")
+    print("Generating answer...")
+    t0 = time.time()
+    answer = generate_rag_answer(sources, k, model, tokenizer)
+    dt = time.time() - t0
+    if dt < 60:
+        print(f"Generation finished in {dt:.3f}s")
+    else:
+        print(f"Generation finished in {int(dt // 60)}min {dt % 60:.3f}s")
+    return answer
 
 
 def answer_dataset(
     student_search_results_path: str,
-    k: int,
     save_directory: str
 ):
-    if not 0 < k <= 50:
-        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
-        return
     try:
-        with open(save_directory, "a") as f:
-            pass
+        with open(save_directory) as f:
+            assert f.writable()
     except FileNotFoundError:
         pass
+    except AssertionError:
+        print(f"file {save_directory} is not writable", file=sys.stderr)
+        return
     except OSError as e:
         print(e, file=sys.stderr)
         return
-    with open(student_search_results_path) as f:
-        results = StudentSearchResults.model_json_schema(f.read())
+    try:
+        with open(student_search_results_path) as f:
+            results = StudentSearchResults.model_validate_json(f.read())
+    except (OSError, json.JSONDecodeError) as e:
+        print(e, file=sys.stderr)
+        return
+    k = results.k
+    if not 0 < k <= 50:
+        print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
+        return
+    print("Loading model...")
+    model, tokenizer = load_model()
+    print("Loaded model.")
+    answered_results: List[MinimalAnswer] = []
+    """for r in tqdm(
+        results.search_results,
+        desc="Answering",
+        unit="q"
+    ):"""
+    for r in tqdm(
+        results.search_results,
+        desc="Answering questions",
+        unit="q"
+    ):
+        try:
+            answer = generate_rag_answer(r, k, model, tokenizer)
+            answered_results.append(answer)
+        except BaseException as e:
+            print(r.question)
+            print(e)
+            return
+        # print(f"\n{answer.question}\n{answer.answer}\n\n")
+    final_results = StudentSearchResultsAndAnswer(
+        search_results=answered_results, k=k
+    )
+    try:
+        os.makedirs("/".join(save_directory.split('/')[:-1]), exist_ok=True)
+        with open(save_directory, 'w') as f:
+            f.write(final_results.model_dump_json(indent=2))
+    except OSError as e:
+        print(e)
+        return
 
 
 def evaluate(dataset_path: str, student_search_results_path: str):
