@@ -1,10 +1,7 @@
 from .chunking import (
     get_py_md_files,
     get_file_metadata,
-    chunk_files,
-    chunk_one_file,
     Chunk,
-    Unit,
     get_python_units,
     get_markdown_units,
     assemble_chunks
@@ -16,7 +13,6 @@ from .models import (
     MinimalSource,
     UnansweredQuestion,
     RagDataset,
-    AnsweredQuestion,
     MinimalSearchResults,
     MinimalAnswer,
     StudentSearchResults,
@@ -160,7 +156,15 @@ def index(max_chunk_size: int = 2000) -> None:
                         pass
 
             # re-insert the files with new chunks
-            new_chunks = chunk_one_file(fn, nxt_id, max_chunk_size)
+            with open(fn) as f:
+                source = f.read()
+            if fn.endswith(".py"):
+                units = get_python_units(source)
+            else:
+                units = get_markdown_units(source)
+            new_chunks = assemble_chunks(
+                source, fn, units, nxt_id, max_chunk_size
+            )
             try:
                 file_metadata = get_file_metadata([fn])
             except OSError as e:
@@ -181,7 +185,15 @@ def index(max_chunk_size: int = 2000) -> None:
         for fn in additions:
             chunk_ids = [int(k) for k in old_chunks.keys()]
             nxt_id = max(chunk_ids) + 1
-            new_chunks = chunk_one_file(fn, nxt_id, max_chunk_size)
+            with open(fn) as f:
+                source = f.read()
+            if fn.endswith(".py"):
+                units = get_python_units(source)
+            else:
+                units = get_markdown_units(source)
+            new_chunks = assemble_chunks(
+                source, fn, units, nxt_id, max_chunk_size
+            )
             chunk_ids = [chunk.id for chunk in new_chunks]
             try:
                 file_metadata = get_file_metadata([fn])
@@ -246,13 +258,6 @@ def index(max_chunk_size: int = 2000) -> None:
         return
 
     # chunk files
-    """try:
-        t0 = time.time()
-        chunks = chunk_files(files, max_chunk_size)
-        dt = time.time() - t0
-    except OSError as e:
-        print(e, file=sys.stderr)
-        return"""
     t0 = time.time()
     chunks: List[Chunk] = []
     try:
@@ -361,7 +366,7 @@ def _rrf(
     )
 
 
-def search(query: str, k: int = 5) -> MinimalSearchResults | None:
+def search(query: str, k: int = 5) -> MinimalSearchResults:
     if k <= 0 or k > 50:
         raise SystemExit(f"invalid k value: {k}; 0 < k ≤ 50")
     question = UnansweredQuestion(question=query)
@@ -474,7 +479,7 @@ def search_dataset(
 def answer(query: str, k: int = 5) -> MinimalAnswer:
     if not 0 < k <= 50:
         print(f"invalid k value: {k}; 0 < k ≤ 50", file=sys.stderr)
-        return
+        raise SystemExit
     print("Searching sources...")
     t0 = time.time()
     sources = search(query, k)
@@ -523,11 +528,6 @@ def answer_dataset(
     model, tokenizer = load_model()
     print("Loaded model.")
     answered_results: List[MinimalAnswer] = []
-    """for r in tqdm(
-        results.search_results,
-        desc="Answering",
-        unit="q"
-    ):"""
     for r in tqdm(
         results.search_results,
         desc="Answering questions",

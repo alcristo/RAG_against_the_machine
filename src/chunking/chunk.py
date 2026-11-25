@@ -72,7 +72,7 @@ class Unit:
         self.unit_type = unit_type
 
 
-def recursive_split(
+"""def recursive_split(
     text: str,
     max_size: int = 2000,
     overlap: int = -1,
@@ -382,7 +382,7 @@ def chunk_files(
 
             chunk_id += 1
 
-    return chunks
+    return chunks"""
 
 
 def build_line_offsets(source: str) -> List[int]:
@@ -394,7 +394,7 @@ def build_line_offsets(source: str) -> List[int]:
     return offsets
 
 
-def ast_position_to_char_offset(
+"""def ast_position_to_char_offset(
         source: str,
         line_offsets: List[int],
         lineno: int,
@@ -444,7 +444,7 @@ def extract_md_positions(filename: str, chunks: List[Chunk], chunk_id: int):
         chunks.append(Chunk(
             chunk_id, filename, source[start:end], start, end
         ))
-        chunk_id += 1
+        chunk_id += 1"""
 
 
 def split_oversized_unit(
@@ -470,7 +470,7 @@ def split_oversized_unit(
         yield start, end
 
 
-def create_chunks(
+"""def create_chunks(
     source: str,
     doc_id: str,
     units: List[Dict[str, Any]],
@@ -542,7 +542,7 @@ def create_chunks(
             current_end,
             " ".join(filter(None, current_context))
         ))
-    return chunks
+    return chunks"""
 
 
 """def get_python_units(source: str) -> List[Unit]:
@@ -958,30 +958,3 @@ def assemble_chunks(
     save_chunk()
 
     return chunks
-
-
-if __name__ == "__main__":
-    filename = "src/chunking/index.py"
-    with open(filename) as f:
-        txt = f.read()
-    raw = recursive_py_split(txt)
-    print(f"{len(raw)} chunks parsed")
-    chunks: List[Chunk] = []
-    for i, chunk in enumerate(raw):
-        chunks.append(Chunk(
-            chunk_id=i,
-            doc_id=filename,
-            content=chunk[0],
-            start_index=sum([len(t) for t in raw[:i]]),
-            end_index=sum([len(t) for t in raw[:i]]) + len(chunk[0]),
-        ))
-    for i, c in enumerate(chunks):
-        # print(f"Chunk {i}\n\n{c.content}")
-        if len(c.content) >= 2000:
-            print("Chunk length violation")
-    merged = merge_chunks(chunks)
-    print(f"{len(merged)} chunks after merging")
-    for i, c in enumerate(merged):
-        # print(f"Chunk {i}\n\n{c.content}")
-        if len(c.content) >= 2000:
-            print("Chunk length violation")
