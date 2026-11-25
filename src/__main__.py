@@ -503,12 +503,9 @@ def answer_dataset(
 ):
     try:
         with open(save_directory) as f:
-            assert f.writable()
+            pass
     except FileNotFoundError:
         pass
-    except AssertionError:
-        print(f"file {save_directory} is not writable", file=sys.stderr)
-        return
     except OSError as e:
         print(e, file=sys.stderr)
         return

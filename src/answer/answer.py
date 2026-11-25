@@ -25,8 +25,8 @@ Instructions:
 - Answer using only the provided context.
 - Do not invent information.
 - If the context doesn't contain the answer, say "I don't know".
-- Cite the sources using [1], [2], etc.
-- Keep answers concise, ideally 2-4 sentences.
+- If you find the answer, cite the sources using [1], [2], etc.
+- Keep answers concise, ideally 2-4 sentences; one sentence if possible.
 - Avoid unnecessary explanations and repetition.
 """
 
@@ -98,7 +98,7 @@ def generate_rag_answer(
     )"""
     generated_ids = model.generate(
         **model_inputs,
-        max_new_tokens=100,
+        max_new_tokens=256,
         do_sample=True,
         temperature=0.7,
         top_p=0.8,
